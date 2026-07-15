@@ -145,13 +145,13 @@ export async function getAllOrders(req, res) {
   }
 }
 
-// UPDATE ORDER STATUS (admin only) - emails the customer on Confirmed/Shipped/Delivered/Cancelled
+// UPDATE ORDER STATUS (admin only) - emails the customer on Confirmed/Processing/Shipped/Delivered/Cancelled
 export async function updateOrderStatus(req, res) {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const validStatuses = ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"];
+    const validStatuses = ["Pending", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"];
     if (!validStatuses.includes(status)) {
       return sendResponse(res, 400, false, "Invalid status value");
     }
@@ -165,7 +165,7 @@ export async function updateOrderStatus(req, res) {
     await order.save();
 
     // Only these statuses are worth emailing the customer about
-    const notifiableStatuses = ["Confirmed", "Shipped", "Delivered", "Cancelled"];
+    const notifiableStatuses = ["Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"];
 
     if (notifiableStatuses.includes(status)) {
       const emailResult = await sendEmail({
