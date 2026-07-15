@@ -1,52 +1,30 @@
-import nodemailer from "nodemailer";
+import * as brevo from "@getbrevo/brevo";
 
-// 👇 Add this
-console.log("SMTP Config:", {
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  user: process.env.EMAIL_USER,
-  from: process.env.EMAIL_FROM,
-});
+const apiInstance = new brevo.TransactionalEmailsApi();
 
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT, 10) || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
-
-transporter.verify((error) => {
-  if (error) {
-    console.error("❌ SMTP Verify Error:", error);
-  } else {
-    console.log("✅ SMTP Server Ready");
-  }
-});
+apiInstance.setApiKey(
+  brevo.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY
+);
 
 export async function sendEmail({ sendTo, subject, text, html }) {
   try {
-    const info = await transporter.sendMail({
-      from: `"Lilium's Glee" <${process.env.EMAIL_FROM}>`,
-      to: sendTo,
+    await apiInstance.sendTransacEmail({
+      sender: {
+        email: process.env.EMAIL_FROM,
+        name: "Lilium's Glee",
+      },
+      to: [{ email: sendTo }],
       subject,
-      text,
-      html,
+      textContent: text,
+      htmlContent: html,
     });
 
-    console.log("✅ Email sent:", info.messageId);
+    console.log("✅ Email sent");
 
-    return {
-      success: true,
-      info,
-    };
+    return { success: true };
   } catch (error) {
-    console.error("❌ Email Error:", error);
+    console.error("❌ Brevo API Error:", error);
 
     return {
       success: false,
