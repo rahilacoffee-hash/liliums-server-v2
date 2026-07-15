@@ -1,30 +1,17 @@
-import "dotenv/config";
-import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+dotenv.config();
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+import sendEmail from "./config/sendEmail.js";
 
-async function testEmail() {
-  try {
-    await transporter.verify();
-    console.log("✅ SMTP Connected");
+const run = async () => {
+  const result = await sendEmail({
+    sendTo: "YOUR_RESEND_ACCOUNT_EMAIL@gmail.com",
+    subject: "Resend Test",
+    html: "<h1>It works! 🎉</h1>",
+    text: "It works!",
+  });
 
-    const info = await transporter.sendMail({
-      from: `"Lilium's Glee" <${process.env.EMAIL_USER}>`,
-      to: "abrahamfred123@gmail.com",
-      subject: "SMTP Test",
-      text: "If you received this email, Nodemailer is working correctly.",
-    });
+  console.log(result);
+};
 
-    console.log(info);
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-testEmail();
+run();
