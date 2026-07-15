@@ -9,6 +9,7 @@ import productRouter from "./route/product.route.js";
 import orderRouter from "./route/Order.route.js";
 import cartRouter from "./route/Cart.route.js";
 import paymentRouter from "./route/Payment.route.js";
+import consultationRouter from "./route/Consultation.route.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -58,6 +59,7 @@ app.use("/api/products", productRouter);
 app.use("/api/order", orderRouter);
 app.use("/api/cart", cartRouter);
 app.use("/api/payment", paymentRouter);
+app.use("/api/consultation", consultationRouter);
 
 // =========================
 // 404 (no path — avoids Express 5 / path-to-regexp "*" bug)
