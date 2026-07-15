@@ -9,7 +9,14 @@ import generatedRefreshToken from "../utils/generatedRefreshToken.js";
 import { sendResponse } from "../utils/Sendresponse.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const isProd = process.env.NODE_ENV === "production";
+
+// Default to production-safe cookie settings unless explicitly running locally.
+// This avoids silently breaking cross-site cookies (Vercel <-> Railway/Render)
+// if NODE_ENV isn't set exactly to "production" on the host platform.
+const isLocal = process.env.NODE_ENV === "development";
+const isProd = !isLocal;
+
+console.log(`[cookieConfig] NODE_ENV="${process.env.NODE_ENV}" -> isProd=${isProd}`);
 
 function getCookieOptions() {
   return {
