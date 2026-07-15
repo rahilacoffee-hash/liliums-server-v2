@@ -1,34 +1,45 @@
-import * as brevo from "@getbrevo/brevo";
-
-const apiInstance = new brevo.TransactionalEmailsApi();
-
-apiInstance.setApiKey(
-  brevo.TransactionalEmailsApiApiKeys.apiKey,
-  process.env.BREVO_API_KEY
-);
+import axios from "axios";
 
 export async function sendEmail({ sendTo, subject, text, html }) {
   try {
-    await apiInstance.sendTransacEmail({
-      sender: {
-        email: process.env.EMAIL_FROM,
-        name: "Lilium's Glee",
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "Lilium's Glee",
+          email: process.env.EMAIL_FROM,
+        },
+        to: [
+          {
+            email: sendTo,
+          },
+        ],
+        subject,
+        htmlContent: html,
+        textContent: text,
       },
-      to: [{ email: sendTo }],
-      subject,
-      textContent: text,
-      htmlContent: html,
-    });
+      {
+        headers: {
+          "api-key": process.env.BREVO_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-    console.log("✅ Email sent");
+    console.log("✅ Email sent:", response.data);
 
-    return { success: true };
+    return {
+      success: true,
+    };
   } catch (error) {
-    console.error("❌ Brevo API Error:", error);
+    console.error(
+      "❌ Brevo API Error:",
+      error.response?.data || error.message
+    );
 
     return {
       success: false,
-      error,
+      error: error.response?.data || error.message,
     };
   }
 }
