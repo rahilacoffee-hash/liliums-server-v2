@@ -2,24 +2,22 @@ import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT),
-  secure: false,
+  port: parseInt(process.env.EMAIL_PORT, 10) || 587,
+  secure: false, // STARTTLS on port 587
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  requireTLS: true,
-  family: 4,
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000,
+  tls: {
+    rejectUnauthorized: false,
+  },
 });
 
 transporter.verify((error) => {
   if (error) {
     console.error("❌ SMTP Verify Error:", error);
   } else {
-    console.log("✅ Brevo SMTP Connected");
+    console.log("✅ SMTP Server Ready");
   }
 });
 
