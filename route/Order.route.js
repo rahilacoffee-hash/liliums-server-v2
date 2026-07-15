@@ -1,46 +1,23 @@
 import { Router } from "express";
 import auth from "../middleware/auth.js";
 import adminOnly from "../middleware/adminOnly.js";
-
 import {
   createOrder,
   getMyOrders,
   getOrderById,
   getAllOrders,
   updateOrderStatus,
-  cancelOrder,
-  markOrderPaid,
 } from "../controllers/Order.controller.js";
 
-const orderRouter = Router();
+const router = Router();
 
-/* ============================================
-   CUSTOMER ROUTES
-============================================ */
+// Any logged-in user
+router.post("/", auth, createOrder);
+router.get("/my-orders", auth, getMyOrders);
+router.get("/:id", auth, getOrderById);
 
-// Create Order
-orderRouter.post("/", auth, createOrder);
+// Admin only
+router.get("/", auth, adminOnly, getAllOrders);
+router.put("/:id/status", auth, adminOnly, updateOrderStatus);
 
-// My Orders
-orderRouter.get("/my-orders", auth, getMyOrders);
-
-// Single Order
-orderRouter.get("/:id", auth, getOrderById);
-
-// Cancel Order
-orderRouter.put("/:id/cancel", auth, cancelOrder);
-
-// Mark Order Paid (after Paystack verification)
-orderRouter.put("/:id/pay", auth, markOrderPaid);
-
-/* ============================================
-   ADMIN ROUTES
-============================================ */
-
-// All Orders
-orderRouter.get("/", auth, adminOnly, getAllOrders);
-
-// Update Status
-orderRouter.put("/:id/status", auth, adminOnly, updateOrderStatus);
-
-export default orderRouter;
+export default router;
