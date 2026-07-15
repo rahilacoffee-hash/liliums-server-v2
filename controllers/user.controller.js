@@ -480,7 +480,8 @@ export async function googleAuthController(req, res) {
     });
 
     const payload = ticket.getPayload();
-    const { email, name, sub: googleId, picture } = payload;
+    const { email, sub: googleId, picture } = payload;
+    const name = payload.name || "John Doe";
 
     let user = await UserModel.findOne({ email });
 
@@ -490,12 +491,11 @@ export async function googleAuthController(req, res) {
         email,
         googleId,
         avatar: picture,
-        verify_email: true, // Google already verified this email
+        verify_email: true,
         role: "USER",
       });
       await user.save();
     } else if (!user.googleId) {
-      // existing email/password account signing in with Google for the first time
       user.googleId = googleId;
       if (!user.avatar) user.avatar = picture;
       await user.save();
