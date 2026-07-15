@@ -2,6 +2,8 @@ import UserModel from "../models/user.model.js";
 import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+
+import { OAuth2Client } from "google-auth-library";
 import sendEmail from "../config/sendEmail.js";
 import verifyEmailTemplate from "../utils/verifyEmailTemplate.js";
 import generatedAccessToken from "../utils/generatedAccessToken.js";
@@ -9,6 +11,7 @@ import generatedRefreshToken from "../utils/generatedRefreshToken.js";
 import { sendResponse } from "../utils/Sendresponse.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Default to production-safe cookie settings unless explicitly running locally.
 // This avoids silently breaking cross-site cookies (Vercel <-> Railway/Render)
@@ -460,5 +463,65 @@ export async function refreshToken(req, res) {
   } catch (error) {
     logError("refreshToken", error);
     return sendResponse(res, 500, false, "Internal server error");
+  }
+}
+
+export async function googleAuthController(req, res) {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return sendResponse(res, 400, false, "Missing Google credential");
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId, picture } = payload;
+
+    let user = await UserModel.findOne({ email });
+
+    if (!user) {
+      user = new UserModel({
+        name,
+        email,
+        googleId,
+        avatar: picture,
+        verify_email: true, // Google already verified this email
+        role: "USER",
+      });
+      await user.save();
+    } else if (!user.googleId) {
+      // existing email/password account signing in with Google for the first time
+      user.googleId = googleId;
+      if (!user.avatar) user.avatar = picture;
+      await user.save();
+    }
+
+    if (user.status === "Suspended") {
+      return sendResponse(res, 403, false, "Your account has been suspended");
+    }
+
+    const accessToken = await generatedAccessToken(user._id);
+    const refreshToken = await generatedRefreshToken(user._id);
+
+    user.refresh_token = refreshToken;
+    user.last_login_date = new Date();
+    await user.save();
+
+    const cookiesOption = getCookieOptions();
+    res.cookie("accessToken", accessToken, cookiesOption);
+    res.cookie("refreshToken", refreshToken, cookiesOption);
+
+    return sendResponse(res, 200, true, "Login successful", {
+      role: user.role,
+      name: user.name,
+    });
+  } catch (error) {
+    logError("googleAuthController", error);
+    return sendResponse(res, 500, false, "Google sign-in failed");
   }
 }

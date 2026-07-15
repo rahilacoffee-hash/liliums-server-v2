@@ -16,6 +16,7 @@ import {
   verifyforgotPasswordOtp,
   resetPassword,
   refreshToken,
+  googleAuthController,
 } from "../controllers/user.controller.js";
 
 const router = Router();
@@ -32,6 +33,7 @@ router.put("/update-user", auth, updateUserDetails);
 router.put("/forgot-password", authLimiter, forgotPasswordController);
 router.put("/verify-forgot-password-otp", authLimiter, verifyforgotPasswordOtp);
 router.put("/reset-password", resetPassword);
-router.post("/refresh-token", refreshToken);
+.post("/refresh-token", refreshToken);
+  router.post("/google", googleAuthController);
 
 export default router;
