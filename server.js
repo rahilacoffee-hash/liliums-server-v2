@@ -13,6 +13,11 @@ import paymentRouter from "./route/Payment.route.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Railway/Render sit behind a reverse proxy — this tells Express to trust
+// the X-Forwarded-For header so express-rate-limit can correctly identify
+// real client IPs instead of throwing the ERR_ERL_UNEXPECTED_X_FORWARDED_FOR warning
+app.set("trust proxy", 1);
+
 // =========================
 // Middleware
 // =========================

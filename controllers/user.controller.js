@@ -13,9 +13,6 @@ import { sendResponse } from "../utils/Sendresponse.js";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// Default to production-safe cookie settings unless explicitly running locally.
-// This avoids silently breaking cross-site cookies (Vercel <-> Railway/Render)
-// if NODE_ENV isn't set exactly to "production" on the host platform.
 const isLocal = process.env.NODE_ENV === "development";
 const isProd = !isLocal;
 
@@ -30,12 +27,10 @@ function getCookieOptions() {
 }
 
 function generateOtp() {
-  // crypto.randomInt is cryptographically secure, unlike Math.random()
   return crypto.randomInt(100000, 999999).toString();
 }
 
 function isStrongPassword(password) {
-  // at least 8 chars, one uppercase, one lowercase, one number, one special char
   const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
   return strongRegex.test(password);
 }
@@ -93,23 +88,18 @@ export async function registerUserController(req, res) {
 
     await user.save();
 
-    const emailResult = await sendEmail({
+    // Fire the email in the background instead of making the request wait on it —
+    // registration succeeds immediately regardless of email provider speed/reliability
+    sendEmail({
       sendTo: email,
       subject: "Verify your Lilium's Glee account",
       text: `Your OTP is ${otpCode}`,
       html: verifyEmailTemplate(name, otpCode),
+    }).then((result) => {
+      if (!result.success) {
+        logError("registerUserController - sendEmail", result.error);
+      }
     });
-
-    if (!emailResult.success) {
-      logError("registerUserController - sendEmail", emailResult.error);
-      return sendResponse(
-        res,
-        201,
-        true,
-        "Account created, but the verification email failed to send. Please use 'resend OTP' or contact support.",
-        { emailSent: false }
-      );
-    }
 
     return sendResponse(res, 200, true, "Registered successfully. Check your email for OTP.");
   } catch (error) {
@@ -166,7 +156,6 @@ export async function loginUserController(req, res) {
     res.cookie("accessToken", accessToken, cookiesOption);
     res.cookie("refreshToken", refreshToken, cookiesOption);
 
-    // Tokens live in httpOnly cookies only - not echoed back in the body
     return sendResponse(res, 200, true, "Login successful", { role: user.role, name: user.name });
   } catch (error) {
     logError("loginUserController", error);
@@ -205,7 +194,7 @@ export async function userDetails(req, res) {
   }
 }
 
-// GET ALL USERS (admin only) - supports search by name/email, role/status filter, pagination
+// GET ALL USERS (admin only)
 export async function getAllUsers(req, res) {
   try {
     const { search, role, status, page = 1, limit = 20 } = req.query;
@@ -245,7 +234,7 @@ export async function getAllUsers(req, res) {
   }
 }
 
-// BLOCK / UNBLOCK USER (admin only) - toggles between Active and Suspended
+// BLOCK / UNBLOCK USER (admin only)
 export async function toggleUserStatus(req, res) {
   try {
     const { id } = req.params;
@@ -267,7 +256,6 @@ export async function toggleUserStatus(req, res) {
 
     user.status = status;
 
-    // a suspended user's existing session should stop working immediately
     if (status === "Suspended") {
       user.refresh_token = "";
     }
@@ -315,7 +303,6 @@ export async function updateUserDetails(req, res) {
         return sendResponse(res, 400, false, "Invalid email address");
       }
 
-      // prevent taking over someone else's email
       const emailExists = await UserModel.findOne({ email, _id: { $ne: req.userId } });
       if (emailExists) {
         return sendResponse(res, 400, false, "Email already in use");
@@ -341,7 +328,6 @@ export async function forgotPasswordController(req, res) {
     const { email } = req.body;
     const user = await UserModel.findOne({ email });
 
-    // don't reveal whether the email exists - respond the same either way
     if (!user) {
       return sendResponse(res, 200, true, "If that email is registered, an OTP has been sent");
     }
@@ -349,16 +335,17 @@ export async function forgotPasswordController(req, res) {
     const otp = generateOtp();
     await UserModel.findByIdAndUpdate(user._id, { otp, otpExpiry: Date.now() + 600000 });
 
-    const emailResult = await sendEmail({
+    // Fire-and-forget here too — don't block the response on email delivery
+    sendEmail({
       sendTo: email,
       subject: "Reset your Lilium's Glee password",
       text: `Your OTP is ${otp}`,
       html: verifyEmailTemplate(user.name, otp),
+    }).then((result) => {
+      if (!result.success) {
+        logError("forgotPasswordController - sendEmail", result.error);
+      }
     });
-
-    if (!emailResult.success) {
-      logError("forgotPasswordController - sendEmail", emailResult.error);
-    }
 
     return sendResponse(res, 200, true, "If that email is registered, an OTP has been sent");
   } catch (error) {
@@ -414,7 +401,6 @@ export async function resetPassword(req, res) {
     if (!user) return sendResponse(res, 400, false, "User not found");
 
     user.password = await bcryptjs.hash(newPassword, 10);
-    // invalidate any existing session on password reset
     user.refresh_token = "";
     await user.save();
 
@@ -442,13 +428,10 @@ export async function refreshToken(req, res) {
 
     const user = await UserModel.findById(verifyToken.id);
 
-    // the stored token must match exactly - if it doesn't, this token was
-    // already rotated/revoked (e.g. reused after logout or a prior refresh)
     if (!user || user.refresh_token !== token) {
       return sendResponse(res, 401, false, "Refresh token revoked");
     }
 
-    // rotate: issue a brand new refresh token and invalidate the old one
     const newAccessToken = await generatedAccessToken(user._id);
     const newRefreshToken = await generatedRefreshToken(user._id);
 
@@ -466,6 +449,7 @@ export async function refreshToken(req, res) {
   }
 }
 
+// GOOGLE SIGN-IN
 export async function googleAuthController(req, res) {
   try {
     const { credential } = req.body;
