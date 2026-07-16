@@ -1,6 +1,8 @@
 import ConsultationModel from "../models/Consultation.model.js";
 import { initializeTransaction, verifyTransaction } from "../config/paystack.js";
 import { sendResponse } from "../utils/Sendresponse.js";
+import sendEmail from "../config/sendEmail.js";
+import { consultationReceivedTemplate, consultationReplyTemplate } from "../utils/Consultationemailtemplates.js";
 
 const CONSULTATION_FEE = 500000; // Naira
 
