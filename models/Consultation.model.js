@@ -17,6 +17,23 @@ let consultationSchema = new mongoose.Schema({
     type: String,
     required: [true, "Provide project type"]
   },
+    consultationFee: {
+    type: Number,
+    default: 500000 // ₦500,000
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["Unpaid", "Paid", "Failed"],
+    default: "Unpaid"
+  },
+  paystackReference: {
+    type: String,
+    default: null
+  },
+  paidAt: {
+    type: Date,
+    default: null
+  },
   service: {
     type: String,
     required: [true, "Provide service needed"]

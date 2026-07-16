@@ -1,10 +1,86 @@
 import ConsultationModel from "../models/Consultation.model.js";
-import sendEmail from "../config/sendEmail.js";
-import { consultationReceivedTemplate, consultationReplyTemplate } from "../utils/Consultationemailtemplates.js";
+import { initializeTransaction, verifyTransaction } from "../config/paystack.js";
 import { sendResponse } from "../utils/Sendresponse.js";
+
+const CONSULTATION_FEE = 500000; // Naira
 
 function logError(context, error) {
   console.error(`[${context}]`, error);
+}
+
+// INITIALIZE PAYMENT (public) - called right after the consultation form is submitted
+export async function initializeConsultationPayment(req, res) {
+  try {
+    const { consultationId } = req.body;
+
+    const consultation = await ConsultationModel.findById(consultationId);
+    if (!consultation) {
+      return sendResponse(res, 404, false, "Consultation not found");
+    }
+
+    if (consultation.paymentStatus === "Paid") {
+      return sendResponse(res, 400, false, "This consultation has already been paid for");
+    }
+
+    const amountInKobo = CONSULTATION_FEE * 100; // Paystack expects the smallest currency unit
+
+    const paystackResponse = await initializeTransaction({
+      email: consultation.email,
+      amountInKobo,
+      metadata: { consultationId: consultation._id.toString() },
+      callback_url: `${process.env.FRONTEND_URL}/consultation-payment-callback`,
+    });
+
+    if (!paystackResponse.status) {
+      return sendResponse(res, 502, false, "Failed to initialize payment");
+    }
+
+    consultation.paystackReference = paystackResponse.data.reference;
+    await consultation.save();
+
+    return sendResponse(res, 200, true, "Payment initialized", {
+      authorizationUrl: paystackResponse.data.authorization_url,
+      reference: paystackResponse.data.reference,
+    });
+  } catch (error) {
+    logError("initializeConsultationPayment", error);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+}
+
+// VERIFY PAYMENT (public) - called from the callback page after Paystack redirects back
+export async function verifyConsultationPayment(req, res) {
+  try {
+    const { reference } = req.params;
+
+    const verification = await verifyTransaction(reference);
+
+    if (!verification.status || verification.data.status !== "success") {
+      return sendResponse(res, 400, false, "Payment verification failed", {
+        paymentStatus: "Failed",
+      });
+    }
+
+    const consultation = await ConsultationModel.findOne({ paystackReference: reference });
+    if (!consultation) {
+      return sendResponse(res, 404, false, "Consultation not found for this reference");
+    }
+
+    // guard against double-processing if this endpoint gets called more than once
+    if (consultation.paymentStatus !== "Paid") {
+      consultation.paymentStatus = "Paid";
+      consultation.paidAt = new Date();
+      await consultation.save();
+    }
+
+    return sendResponse(res, 200, true, "Payment verified", {
+      paymentStatus: "Paid",
+      consultation,
+    });
+  } catch (error) {
+    logError("verifyConsultationPayment", error);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
 }
 
 // CREATE CONSULTATION (public - from the Contact page form)
