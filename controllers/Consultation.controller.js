@@ -30,7 +30,7 @@ export async function initializeConsultationPayment(req, res) {
       email: consultation.email,
       amountInKobo,
       metadata: { consultationId: consultation._id.toString() },
-      callback_url: `${process.env.FRONTEND_URL}/consultation-payment-callback`,
+     callback_url: `${process.env.CLIENT_URL}/consultation-payment-callback`,
     });
 
     if (!paystackResponse.status) {
