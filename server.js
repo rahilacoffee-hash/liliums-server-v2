@@ -12,6 +12,7 @@ import paymentRouter from "./route/Payment.route.js";
 import consultationRouter from "./route/Consultation.route.js";
 import siteContentRouter from "./route/Sitecontent.route.js"
 import testimonialRouter from "./route/Testimonial.route.js"
+import notificationRouter from "./route/Notification.route.js"
 
 
 const app = express();
@@ -65,6 +66,7 @@ app.use("/api/payment", paymentRouter);
 app.use("/api/consultation", consultationRouter);
 app.use("/api/site-content", siteContentRouter);
 app.use("/api/testimonial", testimonialRouter);
+app.use("/api/notification", notificationRouter);
 
 // =========================
 // 404 (no path — avoids Express 5 / path-to-regexp "*" bug)
