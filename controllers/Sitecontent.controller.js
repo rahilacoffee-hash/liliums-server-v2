@@ -1,4 +1,4 @@
-import SiteContentModel from "../models/SiteContent.model.js";
+import SiteContentModel from "../models/Sitecontent.model.js";
 import { sendResponse } from "../utils/Sendresponse.js";
 
 function logError(context, error) {
