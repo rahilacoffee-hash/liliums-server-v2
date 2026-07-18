@@ -13,6 +13,7 @@ import consultationRouter from "./route/Consultation.route.js";
 import siteContentRouter from "./route/Sitecontent.route.js"
 import testimonialRouter from "./route/Testimonial.route.js"
 import notificationRouter from "./route/Notification.route.js"
+import dashboardRouter from "./route/Dashboard.route.js";
 
 
 const app = express();
@@ -67,6 +68,10 @@ app.use("/api/consultation", consultationRouter);
 app.use("/api/site-content", siteContentRouter);
 app.use("/api/testimonial", testimonialRouter);
 app.use("/api/notification", notificationRouter);
+app.use(
+  "/api/dashboard",
+  dashboardRouter
+);
 
 // =========================
 // 404 (no path — avoids Express 5 / path-to-regexp "*" bug)
