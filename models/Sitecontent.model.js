@@ -5,6 +5,27 @@ let statItemSchema = new mongoose.Schema({
   value: { type: String, required: true } // string so "250+" / "98%" both work
 }, { _id: false })
 
+// Used by the "Why Choose" stats grid, which animates counting up to
+// `value` then appends `suffix` (e.g. counts to 250, shows "+" after)
+let whyChooseStatItemSchema = new mongoose.Schema({
+  id: { type: Number, required: true },
+  value: { type: Number, required: true },
+  suffix: { type: String, default: "+" },
+  label: { type: String, required: true }
+}, { _id: false })
+
+// Used by the CTA section's icon-cards
+let ctaStatItemSchema = new mongoose.Schema({
+  id: { type: Number, required: true },
+  icon: {
+    type: String,
+    enum: ["Award", "Users", "Briefcase", "TrendingUp", "Star", "ThumbsUp"],
+    default: "Award"
+  },
+  value: { type: String, required: true },
+  label: { type: String, required: true }
+}, { _id: false })
+
 let buttonSchema = new mongoose.Schema({
   label: { type: String, default: "" },
   href: { type: String, default: "" }
@@ -89,6 +110,23 @@ let siteContentSchema = new mongoose.Schema({
       { label: "Projects Completed", value: "250+" },
       { label: "Happy Clients", value: "120+" },
       { label: "Awards Won", value: "15+" },
+    ]
+  },
+  whyChooseStats: {
+    type: [whyChooseStatItemSchema],
+    default: [
+      { id: 1, value: 250, suffix: "+", label: "Projects Completed" },
+      { id: 2, value: 120, suffix: "+", label: "Happy Clients" },
+      { id: 3, value: 15, suffix: "+", label: "Awards Won" },
+      { id: 4, value: 98, suffix: "%", label: "Client Satisfaction" },
+    ]
+  },
+  ctaStats: {
+    type: [ctaStatItemSchema],
+    default: [
+      { id: 1, icon: "Award", value: "250+", label: "Projects Completed" },
+      { id: 2, icon: "Users", value: "120+", label: "Happy Clients" },
+      { id: 3, icon: "TrendingUp", value: "15+", label: "Awards Won" },
     ]
   }
 }, { timestamps: true })

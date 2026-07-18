@@ -1,4 +1,4 @@
-import SiteContentModel from "../models/Sitecontent.model.js";
+import SiteContentModel from "../models/SiteContent.model.js";
 import { sendResponse } from "../utils/Sendresponse.js";
 
 function logError(context, error) {
@@ -30,12 +30,14 @@ export async function getSiteContent(req, res) {
 // three optional image files: heroBackgroundImage, heroFeaturedImage, aboutImage
 export async function updateSiteContent(req, res) {
   try {
-    let { hero, about, stats } = req.body;
+    let { hero, about, stats, whyChooseStats, ctaStats } = req.body;
 
     // multipart fields arrive as strings - parse the ones that were sent
     if (typeof hero === "string") hero = JSON.parse(hero);
     if (typeof about === "string") about = JSON.parse(about);
     if (typeof stats === "string") stats = JSON.parse(stats);
+    if (typeof whyChooseStats === "string") whyChooseStats = JSON.parse(whyChooseStats);
+    if (typeof ctaStats === "string") ctaStats = JSON.parse(ctaStats);
 
     if (stats !== undefined) {
       if (!Array.isArray(stats)) {
@@ -44,6 +46,28 @@ export async function updateSiteContent(req, res) {
       for (const stat of stats) {
         if (!stat.label || !stat.value) {
           return sendResponse(res, 400, false, "Each stat needs both a label and a value");
+        }
+      }
+    }
+
+    if (whyChooseStats !== undefined) {
+      if (!Array.isArray(whyChooseStats)) {
+        return sendResponse(res, 400, false, "whyChooseStats must be an array");
+      }
+      for (const stat of whyChooseStats) {
+        if (!stat.label || stat.value === undefined || isNaN(stat.value)) {
+          return sendResponse(res, 400, false, "Each Why Choose stat needs a label and a numeric value");
+        }
+      }
+    }
+
+    if (ctaStats !== undefined) {
+      if (!Array.isArray(ctaStats)) {
+        return sendResponse(res, 400, false, "ctaStats must be an array");
+      }
+      for (const stat of ctaStats) {
+        if (!stat.label || !stat.value) {
+          return sendResponse(res, 400, false, "Each CTA stat needs both a label and a value");
         }
       }
     }
@@ -70,6 +94,14 @@ export async function updateSiteContent(req, res) {
 
     if (stats !== undefined) {
       content.stats = stats;
+    }
+
+    if (whyChooseStats !== undefined) {
+      content.whyChooseStats = whyChooseStats;
+    }
+
+    if (ctaStats !== undefined) {
+      content.ctaStats = ctaStats;
     }
 
     // Apply uploaded images on top of whatever was just set above
