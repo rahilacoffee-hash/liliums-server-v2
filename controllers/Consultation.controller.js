@@ -3,6 +3,7 @@ import { initializeTransaction, verifyTransaction } from "../config/paystack.js"
 import { sendResponse } from "../utils/Sendresponse.js";
 import sendEmail from "../config/sendEmail.js";
 import { consultationReceivedTemplate, consultationReplyTemplate } from "../utils/Consultationemailtemplates.js";
+import createNotification from "../utils/Createnotification.js";
 
 const CONSULTATION_FEE = 500000; // Naira
 
@@ -30,7 +31,7 @@ export async function initializeConsultationPayment(req, res) {
       email: consultation.email,
       amountInKobo,
       metadata: { consultationId: consultation._id.toString() },
-     callback_url: `${process.env.CLIENT_URL}/consultation-payment-callback`,
+      callback_url: `${process.env.CLIENT_URL}/consultation-payment-callback`,
     });
 
     if (!paystackResponse.status) {
@@ -100,6 +101,13 @@ export async function createConsultation(req, res) {
     const consultation = await ConsultationModel.create({
       fullName, email, phone, projectType, service,
       budget, preferredDate, preferredTime, message,
+    });
+
+    await createNotification({
+      type: "consultation",
+      title: "New consultation request",
+      message: `${fullName} requested a consultation for ${projectType}`,
+      link: `/admin/consultations/${consultation._id}`,
     });
 
     const emailResult = await sendEmail({

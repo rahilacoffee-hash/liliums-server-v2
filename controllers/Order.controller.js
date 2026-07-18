@@ -4,6 +4,7 @@ import UserModel from "../models/user.model.js";
 import sendEmail from "../config/sendEmail.js";
 import { orderConfirmationTemplate, orderStatusTemplate } from "../utils/orderEmailTemplates.js";
 import { sendResponse } from "../utils/Sendresponse.js";
+import createNotification from "../utils/Createnotification.js";
 
 function logError(context, error) {
   console.error(`[${context}]`, error);
@@ -56,6 +57,14 @@ export async function createOrder(req, res) {
       totalAmount,
       shippingAddress: shippingAddress || "",
     });
+
+
+    await createNotification({
+  type: "order",
+  title: "New order placed",
+  message: `Order #${order._id.toString().slice(-8).toUpperCase()} - ₦${totalAmount.toLocaleString()}`,
+  link: `/admin/orders/${order._id}`,
+});
 
     const user = await UserModel.findById(userId);
 
