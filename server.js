@@ -16,6 +16,7 @@ import notificationRouter from "./route/Notification.route.js"
 import dashboardRouter from "./route/Dashboard.route.js";
 import serviceRouter from "./route/Service.route.js"
 import projectRouter from "./route/Project.route.js"
+import settingsRouter from "./route/Settings.route.js"
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -72,6 +73,7 @@ app.use("/api/notification", notificationRouter);
 app.use("/api/admin", dashboardRouter);
 app.use("/api/service", serviceRouter);
 app.use("/api/project", projectRouter);
+app.use("/api/settings", settingsRouter);
 
 // =========================
 // 404 (no path — avoids Express 5 / path-to-regexp "*" bug)
