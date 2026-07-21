@@ -12,8 +12,11 @@ import paymentRouter from "./route/Payment.route.js";
 import consultationRouter from "./route/Consultation.route.js";
 import siteContentRouter from "./route/Sitecontent.route.js"
 import testimonialRouter from "./route/Testimonial.route.js"
+import settingsRouter from "./route/Settings.route.js"
 import notificationRouter from "./route/Notification.route.js"
-import dashboardRouter from "./route/Dashboard.route.js";
+import serviceRouter from "./route/Service.route.js"
+import projectRouter from "./route/Project.route.js"
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,8 +69,10 @@ app.use("/api/payment", paymentRouter);
 app.use("/api/consultation", consultationRouter);
 app.use("/api/site-content", siteContentRouter);
 app.use("/api/testimonial", testimonialRouter);
+app.use("/api/settings", settingsRouter);
 app.use("/api/notification", notificationRouter);
-app.use("/api/admin", dashboardRouter);
+app.use("/api/service", serviceRouter);
+app.use("/api/project", projectRouter);
 
 // =========================
 // 404 (no path — avoids Express 5 / path-to-regexp "*" bug)

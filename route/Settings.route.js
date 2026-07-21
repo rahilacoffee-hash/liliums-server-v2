@@ -1,7 +1,7 @@
 import { Router } from "express";
 import auth from "../middleware/auth.js";
 import adminOnly from "../middleware/adminOnly.js";
-import { uploadLogo } from "../middleware/uploadImage.js";
+import { uploadLogo } from "../middleware/Uploadimage.js";
 import { getSettings, updateSettings } from "../controllers/Settings.controller.js";
 
 const router = Router();
