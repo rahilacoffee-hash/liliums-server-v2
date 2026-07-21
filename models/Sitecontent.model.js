@@ -91,9 +91,14 @@ let siteContentSchema = new mongoose.Schema({
     }
   },
   about: {
-    title: {
+    eyebrow: {
       type: String,
-      default: "Curating Spaces That Inspire Everyday Living"
+      default: "About Us"
+    },
+    title: {
+      // FIXED: Mixed allows both String (old DB records) and Array (new editor saves)
+      type: mongoose.Schema.Types.Mixed,
+      default: ["Curating Spaces", "That Inspire Everyday Living"]
     },
     description: {
       type: String,
@@ -102,6 +107,10 @@ let siteContentSchema = new mongoose.Schema({
     image: {
       type: String,
       default: ""
+    },
+    button: {
+      type: buttonSchema,
+      default: () => ({ label: "Learn More", href: "/about" })
     }
   },
   stats: {
