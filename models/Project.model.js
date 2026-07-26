@@ -5,6 +5,14 @@ let projectSchema = new mongoose.Schema({
     type: String,
     required: [true, "Provide a title"]
   },
+  slug: {
+    type: String,
+    required: true,
+    unique: true,
+    sparse: true,
+    lowercase: true,
+    trim: true,
+  },
   category: {
     type: String,
     required: [true, "Provide a category"]
