@@ -35,6 +35,18 @@ async function populateMissingSlugs(projects) {
   }));
 }
 
+function parseList(value, fallback = []) {
+  if (Array.isArray(value)) return value;
+  if (!value) return fallback;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // GET ALL PROJECTS (public - supports featuredOnly for the homepage slider)
 export async function getAllProjects(req, res) {
   try {
@@ -72,7 +84,7 @@ export async function getProjectBySlug(req, res) {
 // CREATE PROJECT (admin only)
 export async function createProject(req, res) {
   try {
-    const { title, slug, category, location, year, description, isFeatured, order } = req.body;
+    const { title, slug, category, location, year, description, storyTitle, designApproach, isFeatured, order } = req.body;
 
     if (!title || !category) {
       return sendResponse(res, 400, false, "Title and category are required");
@@ -82,7 +94,17 @@ export async function createProject(req, res) {
     const uniqueSlug = await makeUniqueSlug(slug || title);
 
     const project = await ProjectModel.create({
-      title, slug: uniqueSlug, category, location, year, description, image,
+      title,
+      slug: uniqueSlug,
+      category,
+      location,
+      year,
+      description,
+      storyTitle,
+      designApproach,
+      highlights: parseList(req.body.highlights).filter(Boolean),
+      process: parseList(req.body.process).filter((step) => step?.title || step?.description),
+      image,
       isFeatured: isFeatured ?? true,
       order: order ?? 0,
     });
@@ -98,7 +120,7 @@ export async function createProject(req, res) {
 export async function updateProject(req, res) {
   try {
     const { id } = req.params;
-    const { title, slug, category, location, year, description, isFeatured, order } = req.body;
+    const { title, slug, category, location, year, description, storyTitle, designApproach, isFeatured, order } = req.body;
 
     const project = await ProjectModel.findById(id);
     if (!project) {
@@ -113,6 +135,10 @@ export async function updateProject(req, res) {
     if (location !== undefined) project.location = location;
     if (year !== undefined) project.year = year;
     if (description !== undefined) project.description = description;
+    if (storyTitle !== undefined) project.storyTitle = storyTitle;
+    if (designApproach !== undefined) project.designApproach = designApproach;
+    if (req.body.highlights !== undefined) project.highlights = parseList(req.body.highlights).filter(Boolean);
+    if (req.body.process !== undefined) project.process = parseList(req.body.process).filter((step) => step?.title || step?.description);
     if (isFeatured !== undefined) project.isFeatured = isFeatured;
     if (order !== undefined) project.order = order;
 

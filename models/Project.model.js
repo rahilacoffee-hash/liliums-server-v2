@@ -27,7 +27,26 @@ let projectSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    default: "" // not shown on the slider card yet, but useful for a future project detail page
+    default: ""
+  },
+  storyTitle: {
+    type: String,
+    default: ""
+  },
+  designApproach: {
+    type: String,
+    default: ""
+  },
+  highlights: {
+    type: [String],
+    default: []
+  },
+  process: {
+    type: [{
+      title: { type: String, default: "" },
+      description: { type: String, default: "" }
+    }],
+    default: []
   },
   image: {
     type: String,

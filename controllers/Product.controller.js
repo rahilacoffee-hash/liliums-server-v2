@@ -225,6 +225,24 @@ export async function getProductBySlug(req, res) {
 }
 
 // ===============================
+// GET PRODUCT BY ID (ADMIN)
+// ===============================
+export async function getProductById(req, res) {
+  try {
+    const product = await ProductModel.findById(req.params.id);
+
+    if (!product) {
+      return sendResponse(res, 404, false, "Product not found.");
+    }
+
+    return sendResponse(res, 200, true, "Product fetched.", product);
+  } catch (error) {
+    logError("getProductById", error);
+    return sendResponse(res, 400, false, "Invalid product ID.");
+  }
+}
+
+// ===============================
 // UPDATE PRODUCT
 // ===============================
 export async function updateProduct(req, res) {
@@ -270,11 +288,11 @@ export async function updateProduct(req, res) {
       product.name = name;
     }
 
-    if (category) product.category = category;
-    if (description) product.description = description;
-    if (price) product.price = price;
-    if (comparePrice) product.comparePrice = comparePrice;
-    if (sku) product.sku = sku;
+    if (category !== undefined) product.category = category;
+    if (description !== undefined) product.description = description;
+    if (price !== undefined) product.price = price;
+    if (comparePrice !== undefined) product.comparePrice = comparePrice;
+    if (sku !== undefined) product.sku = sku;
     if (badge !== undefined) product.badge = badge;
     if (stock !== undefined) product.stock = stock;
     if (status) product.status = status;
@@ -283,17 +301,37 @@ export async function updateProduct(req, res) {
       product.isFeatured = isFeatured === "true";
     }
 
-    // Replace images
-    if (req.files && req.files.length > 0) {
-      for (const image of product.images) {
-        await cloudinary.uploader.destroy(image.public_id);
+    // Keep only images that belong to this product and were retained by the
+    // admin form, then append newly uploaded images. This makes individual
+    // image removal work without deleting the whole gallery on every edit.
+    let retainedImages = product.images;
+    if (req.body.existingImages !== undefined) {
+      let requestedImages = [];
+      try {
+        requestedImages = JSON.parse(req.body.existingImages);
+      } catch {
+        return sendResponse(res, 400, false, "Invalid existing images data.");
       }
 
-      product.images = req.files.map((file) => ({
-        url: file.path,
-        public_id: file.filename,
-      }));
+      const retainedIds = new Set(requestedImages.map((image) => image.public_id).filter(Boolean));
+      retainedImages = product.images.filter((image) => retainedIds.has(image.public_id));
     }
+
+    const newImages = req.files?.map((file) => ({
+      url: file.path,
+      public_id: file.filename,
+    })) || [];
+
+    if ([...retainedImages, ...newImages].length === 0) {
+      return sendResponse(res, 400, false, "A product must have at least one image.");
+    }
+
+    const removedImages = product.images.filter(
+      (image) => !retainedImages.some((retained) => retained.public_id === image.public_id)
+    );
+
+    await Promise.all(removedImages.map((image) => cloudinary.uploader.destroy(image.public_id)));
+    product.images = [...retainedImages, ...newImages];
 
     await product.save();
 

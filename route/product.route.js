@@ -8,6 +8,7 @@ import {
   getAllProducts,
   getFeaturedProducts,
   getProductBySlug,
+  getProductById,
   updateProduct,
   deleteProduct,
 } from "../controllers/Product.controller.js";
@@ -28,6 +29,9 @@ const router = Router();
 router.get("/", getAllProducts);
 
 router.get("/featured", getFeaturedProducts);
+
+// Admin edit screens use a Mongo document ID; public product pages use slugs.
+router.get("/id/:id", auth, adminOnly, getProductById);
 
 router.get("/:slug", getProductBySlug);
 
