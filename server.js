@@ -3,6 +3,7 @@ import express from "express";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import { apiLimiter } from "./middleware/rateLimiter.js";
 
 import userRouter from "./route/user.route.js";
 import productRouter from "./route/product.route.js";
@@ -20,11 +21,32 @@ import settingsRouter from "./route/Settings.route.js"
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "https://liliums-glee.vercel.app",
+  process.env.CLIENT_URL,
+].filter(Boolean);
 
 // Railway/Render sit behind a reverse proxy — this tells Express to trust
 // the X-Forwarded-For header so express-rate-limit can correctly identify
 // real client IPs instead of throwing the ERR_ERL_UNEXPECTED_X_FORWARDED_FOR warning
 app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+
+  next();
+});
 
 // =========================
 // Middleware
@@ -32,11 +54,7 @@ app.set("trust proxy", 1);
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://liliums-glee.vercel.app",
-    ],
+    origin: allowedOrigins,
     credentials: true,
   })
 );
@@ -49,7 +67,8 @@ app.use(
   express.raw({ type: "application/json" })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
+app.use("/api", apiLimiter);
 
 // =========================
 // Routes

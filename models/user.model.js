@@ -43,6 +43,10 @@ let userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  passwordResetExpires: {
+    type: Date,
+    default: null
+  },
   role: {
     type: String,
     enum: ["ADMIN", "USER"],

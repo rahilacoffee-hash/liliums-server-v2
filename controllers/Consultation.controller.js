@@ -4,8 +4,7 @@ import { sendResponse } from "../utils/Sendresponse.js";
 import sendEmail from "../config/sendEmail.js";
 import { consultationReceivedTemplate, consultationReplyTemplate } from "../utils/Consultationemailtemplates.js";
 import createNotification from "../utils/Createnotification.js";
-
-const CONSULTATION_FEE = 500000; // Naira
+import SettingsModel from "../models/Settings.model.js";
 
 function logError(context, error) {
   console.error(`[${context}]`, error);
@@ -25,7 +24,9 @@ export async function initializeConsultationPayment(req, res) {
       return sendResponse(res, 400, false, "This consultation has already been paid for");
     }
 
-    const amountInKobo = CONSULTATION_FEE * 100; // Paystack expects the smallest currency unit
+    // Store the selected fee on the consultation when it is created so a
+    // later dashboard price change cannot alter an in-progress payment.
+    const amountInKobo = consultation.consultationFee * 100;
 
     const paystackResponse = await initializeTransaction({
       email: consultation.email,
@@ -69,6 +70,10 @@ export async function verifyConsultationPayment(req, res) {
       return sendResponse(res, 404, false, "Consultation not found for this reference");
     }
 
+    if (Number(verification.data.amount) !== consultation.consultationFee * 100) {
+      return sendResponse(res, 400, false, "Payment amount does not match the consultation fee");
+    }
+
     // guard against double-processing if this endpoint gets called more than once
     if (consultation.paymentStatus !== "Paid") {
       consultation.paymentStatus = "Paid";
@@ -98,9 +103,12 @@ export async function createConsultation(req, res) {
       return sendResponse(res, 400, false, "Provide all required fields");
     }
 
+    const settings = await SettingsModel.findOne();
+    const consultationFee = Number(settings?.consultationFee ?? 500000);
+
     const consultation = await ConsultationModel.create({
       fullName, email, phone, projectType, service,
-      budget, preferredDate, preferredTime, message,
+      budget, preferredDate, preferredTime, message, consultationFee,
     });
 
     await createNotification({

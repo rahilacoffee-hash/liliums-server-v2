@@ -249,22 +249,6 @@ export async function paystackWebhook(req, res) {
       return res.sendStatus(200);
     }
 
-    // Update stock
-    for (const item of order.items) {
-      const product = await ProductModel.findById(
-        item.product
-      );
-
-      if (!product) continue;
-
-      product.stock = Math.max(
-        0,
-        product.stock - item.quantity
-      );
-
-      await product.save();
-    }
-
     // Update order
     order.paymentStatus = "Paid";
     order.status = "Confirmed";

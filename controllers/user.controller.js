@@ -140,6 +140,10 @@ export async function loginUserController(req, res) {
 
     if (!user) return sendResponse(res, 400, false, "Invalid email or password");
 
+    if (user.status === "Suspended") {
+      return sendResponse(res, 403, false, "Your account has been suspended");
+    }
+
     if (!user.verify_email) {
       return sendResponse(res, 403, false, "Please verify your email first");
     }
@@ -339,7 +343,11 @@ export async function forgotPasswordController(req, res) {
     }
 
     const otp = generateOtp();
-    await UserModel.findByIdAndUpdate(user._id, { otp, otpExpiry: Date.now() + 600000 });
+    await UserModel.findByIdAndUpdate(user._id, {
+      otp,
+      otpExpiry: Date.now() + 600000,
+      passwordResetExpires: null,
+    });
 
     const emailResult = await sendEmail({
       sendTo: email,
@@ -371,6 +379,7 @@ export async function verifyforgotPasswordOtp(req, res) {
 
     user.otp = null;
     user.otpExpiry = null;
+    user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
     return sendResponse(res, 200, true, "OTP verified");
@@ -405,9 +414,14 @@ export async function resetPassword(req, res) {
     const user = await UserModel.findOne({ email });
     if (!user) return sendResponse(res, 400, false, "User not found");
 
+    if (!user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      return sendResponse(res, 400, false, "Password reset verification expired. Please request a new OTP.");
+    }
+
     user.password = await bcryptjs.hash(newPassword, 10);
     // invalidate any existing session on password reset
     user.refresh_token = "";
+    user.passwordResetExpires = null;
     await user.save();
 
     return sendResponse(res, 200, true, "Password updated");
