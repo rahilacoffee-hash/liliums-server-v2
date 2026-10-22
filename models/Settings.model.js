@@ -19,11 +19,11 @@ let settingsSchema = new mongoose.Schema({
   },
   supportPhone: {
     type: String,
-    default: ""
+    default: "08058814841"
   },
   address: {
     type: String,
-    default: ""
+    default: "The Mall Dubia, Abuja, Nigeria"
   },
   instagram: {
     type: String,

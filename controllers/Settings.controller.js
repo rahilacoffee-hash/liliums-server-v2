@@ -11,6 +11,19 @@ async function getOrCreateSettings() {
 
   if (!settings) {
     settings = await SettingsModel.create({});
+  } else {
+    // Populate the new site-wide contact defaults for older settings records
+    // that were created before these fields had defaults.
+    let changed = false;
+    if (!settings.supportPhone) {
+      settings.supportPhone = "08058814841";
+      changed = true;
+    }
+    if (!settings.address) {
+      settings.address = "The Mall Dubia, Abuja, Nigeria";
+      changed = true;
+    }
+    if (changed) await settings.save();
   }
 
   return settings;
