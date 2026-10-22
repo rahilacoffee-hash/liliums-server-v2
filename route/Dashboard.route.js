@@ -8,6 +8,7 @@ import {
   getLowStockProducts,
   getRecentOrders,
   getRevenueChart,
+  getSalesByCategory,
 } from "../controllers/Dashboard.controller.js";
 
 const router = Router();
@@ -22,5 +23,6 @@ router.get("/low-stock", getLowStockProducts);
 router.get("/recent-orders", getRecentOrders);
 
 router.get("/revenue-chart", getRevenueChart);
+router.get("/sales-by-category", getSalesByCategory);
 
 export default router;

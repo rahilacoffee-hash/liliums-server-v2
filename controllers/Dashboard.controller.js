@@ -188,3 +188,67 @@ export async function getRevenueChart(req, res) {
     );
   }
 }
+
+/*
+====================================
+Sales by Category
+GET /admin/sales-by-category?days=30
+====================================
+*/
+export async function getSalesByCategory(req, res) {
+  try {
+    const allowedPeriods = new Set(["7", "30", "90", "365", "all"]);
+    const days = allowedPeriods.has(String(req.query.days)) ? String(req.query.days) : "30";
+    const match = { paymentStatus: "Paid" };
+
+    if (days !== "all") {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - Number(days));
+      match.createdAt = { $gte: startDate };
+    }
+
+    const sales = await OrderModel.aggregate([
+      { $match: match },
+      { $unwind: "$items" },
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.product",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      {
+        $project: {
+          category: { $ifNull: [{ $arrayElemAt: ["$product.category", 0] }, "Uncategorized"] },
+          quantity: "$items.quantity",
+          revenue: { $multiply: ["$items.price", "$items.quantity"] },
+          orderId: "$_id",
+        },
+      },
+      {
+        $group: {
+          _id: "$category",
+          revenue: { $sum: "$revenue" },
+          unitsSold: { $sum: "$quantity" },
+          orders: { $addToSet: "$orderId" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          category: "$_id",
+          revenue: 1,
+          unitsSold: 1,
+          orderCount: { $size: "$orders" },
+        },
+      },
+      { $sort: { revenue: -1, category: 1 } },
+    ]);
+
+    return sendResponse(res, 200, true, "Category sales loaded", sales);
+  } catch (error) {
+    console.error(error);
+    return sendResponse(res, 500, false, "Unable to load category sales");
+  }
+}
