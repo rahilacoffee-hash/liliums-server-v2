@@ -18,6 +18,14 @@ let userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  avatar: {
+    type: String,
+    default: ""
+  },
+  avatarPublicId: {
+    type: String,
+    default: ""
+  },
   refresh_token: {
     type: String,
     default: ""

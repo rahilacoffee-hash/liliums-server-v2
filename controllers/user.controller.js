@@ -8,6 +8,7 @@ import generatedAccessToken from "../utils/generatedAccessToken.js";
 import generatedRefreshToken from "../utils/generatedRefreshToken.js";
 import { sendResponse } from "../utils/Sendresponse.js";
 import { OAuth2Client } from "google-auth-library";
+import cloudinary from "../config/cloudinary.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isProd = process.env.NODE_ENV === "production";
@@ -193,7 +194,7 @@ export async function logoutController(req, res) {
 // GET USER DETAILS
 export async function userDetails(req, res) {
   try {
-    const user = await UserModel.findById(req.userId).select("-password -refresh_token -otp -otpExpiry");
+    const user = await UserModel.findById(req.userId).select("-password -refresh_token -otp -otpExpiry -passwordResetExpires -avatarPublicId");
     return sendResponse(res, 200, true, "User fetched", user);
   } catch (error) {
     logError("userDetails", error);
@@ -222,7 +223,7 @@ export async function getAllUsers(req, res) {
 
     const [users, total] = await Promise.all([
       UserModel.find(filter)
-        .select("-password -refresh_token -otp -otpExpiry")
+        .select("-password -refresh_token -otp -otpExpiry -passwordResetExpires -avatarPublicId")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit)),
@@ -306,6 +307,10 @@ export async function updateUserDetails(req, res) {
   try {
     const { name, email, mobile } = req.body;
 
+    if (name !== undefined && !name.trim()) {
+      return sendResponse(res, 400, false, "Name cannot be empty");
+    }
+
     if (email) {
       if (!EMAIL_REGEX.test(email)) {
         return sendResponse(res, 400, false, "Invalid email address");
@@ -318,11 +323,33 @@ export async function updateUserDetails(req, res) {
       }
     }
 
-    const updatedUser = await UserModel.findByIdAndUpdate(
-      req.userId,
-      { name, email, mobile },
-      { new: true }
-    ).select("-password -refresh_token -otp -otpExpiry");
+    const user = await UserModel.findById(req.userId);
+    if (!user) return sendResponse(res, 404, false, "User not found");
+
+    if (name !== undefined) user.name = name.trim();
+    if (email !== undefined) user.email = email;
+    if (mobile !== undefined) user.mobile = mobile;
+
+    const previousAvatarPublicId = user.avatarPublicId;
+    if (req.file) {
+      user.avatar = req.file.path;
+      user.avatarPublicId = req.file.filename;
+    }
+
+    await user.save();
+
+    if (req.file && previousAvatarPublicId) {
+      cloudinary.uploader.destroy(previousAvatarPublicId).catch((error) =>
+        logError("updateUserDetails - remove old avatar", error)
+      );
+    }
+
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+    delete updatedUser.refresh_token;
+    delete updatedUser.otp;
+    delete updatedUser.otpExpiry;
+    delete updatedUser.passwordResetExpires;
 
     return sendResponse(res, 200, true, "Updated successfully", updatedUser);
   } catch (error) {
