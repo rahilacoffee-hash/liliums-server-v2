@@ -57,7 +57,13 @@ export function orderConfirmationTemplate(order, userName) {
 
       ${order.shippingAddress ? `
       <p style="color: #C6B8A8; font-size: 13px; line-height: 1.6; margin: 20px 0 0 0;">
-        Shipping to: ${order.shippingAddress}
+        Shipping to: ${typeof order.shippingAddress === "string" ? order.shippingAddress : [
+          order.shippingAddress.fullName,
+          order.shippingAddress.phone,
+          order.shippingAddress.address,
+          [order.shippingAddress.city, order.shippingAddress.state].filter(Boolean).join(", "),
+          order.shippingAddress.country,
+        ].filter(Boolean).join("<br />")}
       </p>` : ""}
 
       <p style="color: #C6B8A8; font-size: 13px; line-height: 1.6; margin: 24px 0 0 0;">
