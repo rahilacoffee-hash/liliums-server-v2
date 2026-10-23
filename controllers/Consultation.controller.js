@@ -212,7 +212,7 @@ export async function replyToConsultation(req, res) {
 
     if (!emailResult.success) {
       logError("replyToConsultation - sendEmail", emailResult.error);
-      return sendResponse(res, 502, false, "Reply saved but the email failed to send. Please try again.");
+      return sendResponse(res, 502, false, "The reply was not saved because its email could not be delivered. Please try again.");
     }
 
     consultation.reply = reply;
