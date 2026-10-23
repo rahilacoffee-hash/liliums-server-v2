@@ -4,8 +4,8 @@ const colorSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   hex: { type: String, default: "#C8A96A", trim: true },
   image: {
-    url: { type: String, required: true },
-    public_id: { type: String, required: true },
+    url: { type: String, default: "" },
+    public_id: { type: String, default: "" },
   },
 }, { _id: true });
 
@@ -70,8 +70,8 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
-    // Sizes apply to the product. Every colour is a visual variant with its
-    // own uploaded image, so customers never have to guess the finish.
+    // Sizes apply to the product. A colour can optionally provide its own
+    // image; otherwise the regular product gallery is used.
     sizes: [{ type: String, trim: true }],
     colors: { type: [colorSchema], default: [] },
 

@@ -33,7 +33,7 @@ function buildColors(rawColors, files) {
     // position of a row in the form. This matters when an admin leaves a
     // colour row without choosing a replacement image.
     image: color.image?.url ? color.image : uploads[color.uploadIndex ?? index],
-  })).filter((color) => color.name && color.image?.url);
+  })).filter((color) => color.name);
 }
 
 // ===============================
@@ -69,9 +69,9 @@ export async function createProduct(req, res) {
     const requestedColors = parseJson(colors, []);
     const parsedColors = buildColors(requestedColors, req.files);
     if (requestedColors.length !== parsedColors.length) {
-      return sendResponse(res, 400, false, "Every colour needs a name and an uploaded image.");
+      return sendResponse(res, 400, false, "Every colour needs a name.");
     }
-    if (galleryImages.length === 0 && parsedColors.length === 0) {
+    if (galleryImages.length === 0) {
       return sendResponse(
         res,
         400,
@@ -97,7 +97,7 @@ export async function createProduct(req, res) {
       comparePrice,
       sku,
       badge,
-      images: galleryImages.length ? galleryImages : [parsedColors[0].image],
+      images: galleryImages,
       sizes: parseJson(sizes, []).map((size) => String(size).trim()).filter(Boolean),
       colors: parsedColors,
       isFeatured: isFeatured === "true",
@@ -350,11 +350,11 @@ export async function updateProduct(req, res) {
       const requestedColors = parseJson(req.body.colors, []);
       nextColors = buildColors(requestedColors, req.files);
       if (requestedColors.length !== nextColors.length) {
-        return sendResponse(res, 400, false, "Every colour needs a name and an image.");
+        return sendResponse(res, 400, false, "Every colour needs a name.");
       }
     }
 
-    if ([...retainedImages, ...newImages].length === 0 && !(nextColors || product.colors || []).length) {
+    if ([...retainedImages, ...newImages].length === 0) {
       return sendResponse(res, 400, false, "A product must have at least one image.");
     }
 
