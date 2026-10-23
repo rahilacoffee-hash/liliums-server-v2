@@ -75,6 +75,9 @@ let siteContentSchema = new mongoose.Schema({
       eyebrow: { type: String, default: "Featured Collection" },
       title: { type: String, default: "" },
       description: { type: String, default: "" },
+      location: { type: String, default: "" },
+      area: { type: String, default: "" },
+      year: { type: String, default: "" },
       button: {
         type: buttonSchema,
         default: () => ({ label: "Explore Collection", href: "/shop" })
