@@ -34,6 +34,13 @@ export async function createOrder(req, res) {
 
       const quantity = entry.quantity || 1;
 
+      if (entry.selectedColor && !(product.colors || []).some((color) => color.name === entry.selectedColor)) {
+        return sendResponse(res, 400, false, `Colour is unavailable for ${product.name}`);
+      }
+      if (entry.selectedSize && !(product.sizes || []).includes(entry.selectedSize)) {
+        return sendResponse(res, 400, false, `Size is unavailable for ${product.name}`);
+      }
+
       if (product.stock < quantity) {
         return sendResponse(res, 400, false, `Insufficient stock for ${product.name}`);
       }
@@ -41,8 +48,11 @@ export async function createOrder(req, res) {
       orderItems.push({
         product: product._id,
         name: product.name,
+        image: product.colors?.find((color) => color.name === entry.selectedColor)?.image?.url || product.images?.[0]?.url || "",
         price: product.price,
         quantity,
+        selectedColor: entry.selectedColor || "",
+        selectedSize: entry.selectedSize || "",
       });
 
       totalAmount += product.price * quantity;

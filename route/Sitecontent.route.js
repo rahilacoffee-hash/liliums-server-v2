@@ -14,7 +14,6 @@ router.put(
   adminOnly,
   uploadSiteContentImages.fields([
     { name: "heroBackgroundImage", maxCount: 1 },
-    { name: "heroFeaturedImage", maxCount: 1 },
     { name: "aboutImage", maxCount: 1 },
   ]),
   updateSiteContent

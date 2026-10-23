@@ -27,7 +27,7 @@ export async function getSiteContent(req, res) {
 // UPDATE SITE CONTENT (admin only)
 // Expects multipart/form-data: hero/about/stats sent as JSON strings
 // (since regular form fields can't carry nested objects), plus up to
-// three optional image files: heroBackgroundImage, heroFeaturedImage, aboutImage
+// optional image files: heroBackgroundImage and aboutImage
 export async function updateSiteContent(req, res) {
   try {
     let { hero, about, stats, whyChooseStats, ctaStats } = req.body;
@@ -107,10 +107,6 @@ export async function updateSiteContent(req, res) {
     // Apply uploaded images on top of whatever was just set above
     if (req.files?.heroBackgroundImage?.[0]) {
       content.hero.backgroundImage = req.files.heroBackgroundImage[0].path;
-    }
-
-    if (req.files?.heroFeaturedImage?.[0]) {
-      content.hero.featuredCollection.image = req.files.heroFeaturedImage[0].path;
     }
 
     if (req.files?.aboutImage?.[0]) {

@@ -36,6 +36,9 @@ const orderSchema = new mongoose.Schema(
           default: 1,
           min: 1,
         },
+
+        selectedColor: { type: String, default: "" },
+        selectedSize: { type: String, default: "" },
       },
     ],
 

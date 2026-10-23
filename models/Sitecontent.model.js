@@ -45,13 +45,20 @@ let showcaseItemSchema = new mongoose.Schema({
 
 let siteContentSchema = new mongoose.Schema({
   hero: {
+    // Single, editorial homepage hero. These fields are intentionally not an
+    // array: the homepage does not rotate or behave as a slideshow.
+    brandName: { type: String, default: "LILIUMS GLEEE" },
+    scriptTitle: { type: String, default: "Gleee" },
+    sideCopy: { type: String, default: "LUXURY INTERIORS\nFOR MODERN LIVING" },
+    bottomCopy: { type: String, default: "WE DESIGN SPACES THAT\nINSPIRE, COMFORT AND ELEVATE." },
+    scrollLabel: { type: String, default: "SCROLL DOWN" },
     eyebrow: {
       type: String,
-      default: "Luxury Interior Design"
+      default: "INTERIOR DESIGN"
     },
     title: {
       type: String,
-      default: "Designing Timeless Interiors That Inspire Living"
+      default: "LILIUMS"
     },
     description: {
       type: String,

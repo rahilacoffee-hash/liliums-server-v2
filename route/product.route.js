@@ -56,7 +56,7 @@ router.post(
   "/",
   auth,
   adminOnly,
-  upload.array("images", 10),
+  upload.fields([{ name: "images", maxCount: 10 }, { name: "colorImages", maxCount: 10 }]),
   createProduct
 );
 
@@ -65,7 +65,7 @@ router.put(
   "/:id",
   auth,
   adminOnly,
-  upload.array("images", 10),
+  upload.fields([{ name: "images", maxCount: 10 }, { name: "colorImages", maxCount: 10 }]),
   updateProduct
 );
 

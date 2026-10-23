@@ -15,6 +15,27 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
+function parseJson(value, fallback) {
+  if (!value) return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function uploadedImages(files, field = "images") {
+  return (files?.[field] || []).map((file) => ({ url: file.path, public_id: file.filename }));
+}
+
+function buildColors(rawColors, files) {
+  const uploads = uploadedImages(files, "colorImages");
+  return (Array.isArray(rawColors) ? rawColors : []).map((color, index) => ({
+    name: color.name?.trim(),
+    hex: color.hex || "#C8A96A",
+    // `uploadIndex` refers to the colorImages upload list, not the visual
+    // position of a row in the form. This matters when an admin leaves a
+    // colour row without choosing a replacement image.
+    image: color.image?.url ? color.image : uploads[color.uploadIndex ?? index],
+  })).filter((color) => color.name && color.image?.url);
+}
+
 // ===============================
 // CREATE PRODUCT
 // ===============================
@@ -31,6 +52,8 @@ export async function createProduct(req, res) {
       isFeatured,
       stock,
       status,
+      sizes,
+      colors,
     } = req.body;
 
     if (!name || !category || !description || !price) {
@@ -42,7 +65,13 @@ export async function createProduct(req, res) {
       );
     }
 
-    if (!req.files || req.files.length === 0) {
+    const galleryImages = uploadedImages(req.files);
+    const requestedColors = parseJson(colors, []);
+    const parsedColors = buildColors(requestedColors, req.files);
+    if (requestedColors.length !== parsedColors.length) {
+      return sendResponse(res, 400, false, "Every colour needs a name and an uploaded image.");
+    }
+    if (galleryImages.length === 0 && parsedColors.length === 0) {
       return sendResponse(
         res,
         400,
@@ -59,11 +88,6 @@ export async function createProduct(req, res) {
       slug = `${slug}-${Date.now()}`;
     }
 
-    const images = req.files.map((file) => ({
-      url: file.path,
-      public_id: file.filename,
-    }));
-
     const product = await ProductModel.create({
       name,
       slug,
@@ -73,7 +97,9 @@ export async function createProduct(req, res) {
       comparePrice,
       sku,
       badge,
-      images,
+      images: galleryImages.length ? galleryImages : [parsedColors[0].image],
+      sizes: parseJson(sizes, []).map((size) => String(size).trim()).filter(Boolean),
+      colors: parsedColors,
       isFeatured: isFeatured === "true",
       stock: stock || 0,
       status: status || "Active",
@@ -317,12 +343,18 @@ export async function updateProduct(req, res) {
       retainedImages = product.images.filter((image) => retainedIds.has(image.public_id));
     }
 
-    const newImages = req.files?.map((file) => ({
-      url: file.path,
-      public_id: file.filename,
-    })) || [];
+    const newImages = uploadedImages(req.files);
 
-    if ([...retainedImages, ...newImages].length === 0) {
+    let nextColors;
+    if (req.body.colors !== undefined) {
+      const requestedColors = parseJson(req.body.colors, []);
+      nextColors = buildColors(requestedColors, req.files);
+      if (requestedColors.length !== nextColors.length) {
+        return sendResponse(res, 400, false, "Every colour needs a name and an image.");
+      }
+    }
+
+    if ([...retainedImages, ...newImages].length === 0 && !(nextColors || product.colors || []).length) {
       return sendResponse(res, 400, false, "A product must have at least one image.");
     }
 
@@ -332,6 +364,13 @@ export async function updateProduct(req, res) {
 
     await Promise.all(removedImages.map((image) => cloudinary.uploader.destroy(image.public_id)));
     product.images = [...retainedImages, ...newImages];
+
+    if (req.body.sizes !== undefined) product.sizes = parseJson(req.body.sizes, []).map((size) => String(size).trim()).filter(Boolean);
+    if (req.body.colors !== undefined) {
+      const retainedColorIds = new Set(nextColors.map((color) => color.image?.public_id).filter(Boolean));
+      await Promise.all((product.colors || []).filter((color) => color.image?.public_id && !retainedColorIds.has(color.image.public_id)).map((color) => cloudinary.uploader.destroy(color.image.public_id)));
+      product.colors = nextColors;
+    }
 
     await product.save();
 
@@ -374,6 +413,9 @@ export async function deleteProduct(req, res) {
 
     for (const image of product.images) {
       await cloudinary.uploader.destroy(image.public_id);
+    }
+    for (const color of product.colors || []) {
+      if (color.image?.public_id) await cloudinary.uploader.destroy(color.image.public_id);
     }
 
     await product.deleteOne();
