@@ -47,6 +47,9 @@ export async function createProduct(req, res) {
       sku,
       badge,
       isFeatured,
+      isPreorder,
+      preorderDescription,
+      preorderDeliveryDays,
       stock,
       status,
       sizes,
@@ -98,6 +101,9 @@ export async function createProduct(req, res) {
       sizes: parseJson(sizes, []).map((size) => String(size).trim()).filter(Boolean),
       colors: parsedColors,
       isFeatured: isFeatured === "true",
+      isPreorder: isPreorder === "true",
+      preorderDescription: isPreorder === "true" ? preorderDescription || "" : "",
+      preorderDeliveryDays: isPreorder === "true" ? Number(preorderDeliveryDays) || 15 : 15,
       stock: stock || 0,
       status: status || "Active",
     });
@@ -293,6 +299,9 @@ export async function updateProduct(req, res) {
       badge,
       stock,
       isFeatured,
+      isPreorder,
+      preorderDescription,
+      preorderDeliveryDays,
       status,
     } = req.body;
 
@@ -323,6 +332,9 @@ export async function updateProduct(req, res) {
     if (isFeatured !== undefined) {
       product.isFeatured = isFeatured === "true";
     }
+    if (isPreorder !== undefined) product.isPreorder = isPreorder === "true";
+    if (preorderDescription !== undefined) product.preorderDescription = product.isPreorder ? preorderDescription : "";
+    if (preorderDeliveryDays !== undefined) product.preorderDeliveryDays = product.isPreorder ? Number(preorderDeliveryDays) || 15 : 15;
 
     // Keep only images that belong to this product and were retained by the
     // admin form, then append newly uploaded images. This makes individual

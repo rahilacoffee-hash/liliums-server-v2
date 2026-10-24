@@ -97,6 +97,23 @@ const productSchema = new mongoose.Schema(
       default: false,
     },
 
+    isPreorder: {
+      type: Boolean,
+      default: false,
+    },
+
+    preorderDescription: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    preorderDeliveryDays: {
+      type: Number,
+      default: 15,
+      min: 1,
+    },
+
     stock: {
       type: Number,
       default: 0,

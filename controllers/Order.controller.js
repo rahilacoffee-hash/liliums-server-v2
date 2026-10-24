@@ -41,7 +41,7 @@ export async function createOrder(req, res) {
         return sendResponse(res, 400, false, `Size is unavailable for ${product.name}`);
       }
 
-      if (product.stock < quantity) {
+      if (!product.isPreorder && product.stock < quantity) {
         return sendResponse(res, 400, false, `Insufficient stock for ${product.name}`);
       }
 
@@ -53,12 +53,16 @@ export async function createOrder(req, res) {
         quantity,
         selectedColor: entry.selectedColor || "",
         selectedSize: entry.selectedSize || "",
+        isPreorder: Boolean(product.isPreorder),
+        preorderDeliveryDays: product.isPreorder ? product.preorderDeliveryDays || 15 : null,
       });
 
       totalAmount += product.price * quantity;
 
-      product.stock -= quantity;
-      await product.save();
+      if (!product.isPreorder) {
+        product.stock -= quantity;
+        await product.save();
+      }
     }
 
     const order = await OrderModel.create({

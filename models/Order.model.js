@@ -39,6 +39,8 @@ const orderSchema = new mongoose.Schema(
 
         selectedColor: { type: String, default: "" },
         selectedSize: { type: String, default: "" },
+        isPreorder: { type: Boolean, default: false },
+        preorderDeliveryDays: { type: Number, default: null },
       },
     ],
 
