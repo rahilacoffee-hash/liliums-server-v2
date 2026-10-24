@@ -358,6 +358,32 @@ export async function updateUserDetails(req, res) {
   }
 }
 
+// SAVE SHIPPING ADDRESS
+export async function saveShippingAddress(req, res) {
+  try {
+    const { label = "Home", fullName, phone, address, city, state, country = "Nigeria" } = req.body;
+    if (![fullName, phone, address, city, state].every((value) => value?.trim())) {
+      return sendResponse(res, 400, false, "Provide all required address fields");
+    }
+
+    const user = await UserModel.findById(req.userId);
+    if (!user) return sendResponse(res, 404, false, "User not found");
+
+    const normalized = { label: label.trim() || "Home", fullName: fullName.trim(), phone: phone.trim(), address: address.trim(), city: city.trim(), state: state.trim(), country: country.trim() || "Nigeria" };
+    const existingIndex = user.savedAddresses.findIndex((item) =>
+      item.address.toLowerCase() === normalized.address.toLowerCase() && item.city.toLowerCase() === normalized.city.toLowerCase()
+    );
+    if (existingIndex >= 0) user.savedAddresses[existingIndex] = normalized;
+    else user.savedAddresses.push(normalized);
+
+    await user.save();
+    return sendResponse(res, 200, true, "Address saved", user.savedAddresses);
+  } catch (error) {
+    logError("saveShippingAddress", error);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+}
+
 // FORGOT PASSWORD
 export async function forgotPasswordController(req, res) {
   try {

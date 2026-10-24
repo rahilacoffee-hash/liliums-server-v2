@@ -13,6 +13,7 @@ import {
   toggleUserStatus,
   deleteUser,
   updateUserDetails,
+  saveShippingAddress,
   forgotPasswordController,
   verifyforgotPasswordOtp,
   resetPassword,
@@ -31,6 +32,7 @@ router.get("/all", auth, adminOnly, getAllUsers);
 router.put("/:id/status", auth, adminOnly, toggleUserStatus);
 router.delete("/:id", auth, adminOnly, deleteUser);
 router.put("/update-user", auth, uploadUserAvatar.single("avatar"), updateUserDetails);
+router.post("/saved-addresses", auth, saveShippingAddress);
 router.put("/forgot-password", authLimiter, forgotPasswordController);
 router.put("/verify-forgot-password-otp", authLimiter, verifyforgotPasswordOtp);
 router.put("/reset-password", resetPassword);

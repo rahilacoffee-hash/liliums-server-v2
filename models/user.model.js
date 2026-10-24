@@ -1,5 +1,15 @@
 import mongoose from "mongoose"
 
+const savedAddressSchema = new mongoose.Schema({
+  label: { type: String, default: "Home", trim: true },
+  fullName: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, trim: true },
+  address: { type: String, required: true, trim: true },
+  city: { type: String, required: true, trim: true },
+  state: { type: String, required: true, trim: true },
+  country: { type: String, default: "Nigeria", trim: true },
+}, { _id: true });
+
 let userSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -59,7 +69,8 @@ let userSchema = new mongoose.Schema({
     type: String,
     enum: ["ADMIN", "USER"],
     default: "USER"
-  }
+  },
+  savedAddresses: { type: [savedAddressSchema], default: [] }
 }, { timestamps: true })
 
 let UserModel = mongoose.model("User", userSchema)
