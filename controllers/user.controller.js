@@ -11,14 +11,17 @@ import { OAuth2Client } from "google-auth-library";
 import cloudinary from "../config/cloudinary.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const isProd = process.env.NODE_ENV === "production";
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-function getCookieOptions() {
+function getCookieOptions(req) {
+  // Hosting platforms do not always set NODE_ENV. Use the actual request
+  // scheme (including the trusted proxy header) so HTTPS logins receive a
+  // cross-site-capable cookie on Safari and other mobile browsers.
+  const isSecureRequest = req.secure || req.get("x-forwarded-proto") === "https";
   return {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "None" : "Lax",
+    secure: isSecureRequest,
+    sameSite: isSecureRequest ? "None" : "Lax",
   };
 }
 
@@ -159,7 +162,7 @@ export async function loginUserController(req, res) {
     user.last_login_date = new Date();
     await user.save();
 
-    const cookiesOption = getCookieOptions();
+    const cookiesOption = getCookieOptions(req);
     res.cookie("accessToken", accessToken, cookiesOption);
     res.cookie("refreshToken", refreshToken, cookiesOption);
 
@@ -175,7 +178,7 @@ export async function loginUserController(req, res) {
 export async function logoutController(req, res) {
   try {
     const userId = req.userId;
-    const cookiesOption = getCookieOptions();
+    const cookiesOption = getCookieOptions(req);
 
     res.clearCookie("accessToken", cookiesOption);
     res.clearCookie("refreshToken", cookiesOption);
@@ -514,7 +517,7 @@ export async function refreshToken(req, res) {
     user.refresh_token = newRefreshToken;
     await user.save();
 
-    const cookiesOption = getCookieOptions();
+    const cookiesOption = getCookieOptions(req);
     res.cookie("accessToken", newAccessToken, cookiesOption);
     res.cookie("refreshToken", newRefreshToken, cookiesOption);
 
@@ -539,7 +542,10 @@ export async function googleAuthController(req, res) {
     });
 
     const payload = ticket.getPayload();
-    const { email, sub: googleId, picture } = payload;
+    const { email, sub: googleId, picture, email_verified: emailVerified } = payload;
+    if (!email || !googleId || !emailVerified) {
+      return sendResponse(res, 401, false, "Google account email is not verified");
+    }
     const name = payload.name || "John Doe";
 
     let user = await UserModel.findOne({ email });
@@ -558,6 +564,10 @@ export async function googleAuthController(req, res) {
       user.googleId = googleId;
       if (!user.avatar) user.avatar = picture;
       await user.save();
+    } else if (user.googleId !== googleId) {
+      // Do not let a different Google identity take over an existing account
+      // merely because it reports the same email address.
+      return sendResponse(res, 403, false, "This email is already linked to another Google account");
     }
 
     if (user.status === "Suspended") {
@@ -571,7 +581,7 @@ export async function googleAuthController(req, res) {
     user.last_login_date = new Date();
     await user.save();
 
-    const cookiesOption = getCookieOptions();
+    const cookiesOption = getCookieOptions(req);
     res.cookie("accessToken", accessToken, cookiesOption);
     res.cookie("refreshToken", refreshToken, cookiesOption);
 

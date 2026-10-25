@@ -152,12 +152,17 @@ export async function getAllProducts(req, res) {
       };
     }
 
-    const skip = (page - 1) * limit;
+    // Query values are strings and are client-controlled. Normalise and cap
+    // them so pagination remains predictable and cannot request an unbounded
+    // database response. The admin screen explicitly requests this maximum.
+    const currentPage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.min(1000, Math.max(1, Number.parseInt(limit, 10) || 12));
+    const skip = (currentPage - 1) * pageSize;
 
     const products = await ProductModel.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit));
+      .limit(pageSize);
 
     const total = await ProductModel.countDocuments(filter);
 
@@ -169,8 +174,8 @@ export async function getAllProducts(req, res) {
       {
         products,
         total,
-        page: Number(page),
-        totalPages: Math.ceil(total / limit),
+        page: currentPage,
+        totalPages: Math.ceil(total / pageSize),
       }
     );
   } catch (error) {

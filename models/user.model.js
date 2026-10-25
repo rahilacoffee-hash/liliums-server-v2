@@ -22,7 +22,15 @@ let userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, "Provide password"]
+    // Google accounts authenticate with a verified Google ID token, so they
+    // do not have a local password to validate.
+    required: function () { return !this.googleId; }
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true,
+    default: null,
   },
   mobile: {
     type: String,
