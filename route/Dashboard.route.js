@@ -11,10 +11,21 @@ import {
   getSalesByCategory,
 } from "../controllers/Dashboard.controller.js";
 
+import {
+  getAdminProductStats,
+  getAdminProducts,
+} from "../controllers/AdminProduct.controller.js";
+
 const router = Router();
 
 router.use(auth);
 router.use(adminOnly);
+
+router.get("/products/stats", getAdminProductStats);
+router.get("/products", getAdminProducts);
+
+
+
 
 router.get("/dashboard", getDashboard);
 
