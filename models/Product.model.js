@@ -1,13 +1,31 @@
+
 import mongoose from "mongoose";
 
-const colorSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  hex: { type: String, default: "#C8A96A", trim: true },
-  image: {
-    url: { type: String, default: "" },
-    public_id: { type: String, default: "" },
+const colorSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    hex: {
+      type: String,
+      default: "#C8A96A",
+      trim: true,
+    },
+    image: {
+      url: {
+        type: String,
+        default: "",
+      },
+      public_id: {
+        type: String,
+        default: "",
+      },
+    },
   },
-}, { _id: true });
+  { _id: true }
+);
 
 const productSchema = new mongoose.Schema(
   {
@@ -55,14 +73,13 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Multiple Images
+    // Product gallery images
     images: [
       {
         url: {
           type: String,
           required: true,
         },
-
         public_id: {
           type: String,
           required: true,
@@ -70,10 +87,18 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
-    // The first product image is used on cards; the remaining images form
-    // the detail-page gallery (including the product shown in use).
-    sizes: [{ type: String, trim: true }],
-    colors: { type: [colorSchema], default: [] },
+    // Product sizes and colour variants
+    sizes: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+
+    colors: {
+      type: [colorSchema],
+      default: [],
+    },
 
     badge: {
       type: String,
@@ -131,10 +156,13 @@ const productSchema = new mongoose.Schema(
   }
 );
 
+// Existing indexes
 productSchema.index({ category: 1 });
 productSchema.index({ isFeatured: 1 });
-
 productSchema.index({ status: 1 });
+
+// Supports the default product listing sorted by newest first.
+productSchema.index({ createdAt: -1 });
 
 const ProductModel = mongoose.model("Product", productSchema);
 
