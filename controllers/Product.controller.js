@@ -173,6 +173,7 @@ export async function createProduct(req, res) {
 // GET ALL PRODUCTS
 // ===============================
 
+
 export async function getAllProducts(req, res) {
   const startedAt = performance.now();
 
@@ -212,13 +213,18 @@ export async function getAllProducts(req, res) {
       return sendResponse(res, 400, false, "Invalid page number.");
     }
 
-    // Fetch one extra product to determine whether another page exists.
+    const queryStartedAt = performance.now();
+
     const products = await ProductModel.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageSize + 1)
       .lean()
       .exec();
+
+    const queryMs = Math.round(
+      performance.now() - queryStartedAt
+    );
 
     const hasMore = products.length > pageSize;
     const visibleProducts = hasMore
@@ -227,6 +233,7 @@ export async function getAllProducts(req, res) {
 
     console.log("[product-list timing]", {
       totalMs: Math.round(performance.now() - startedAt),
+      queryMs,
       returned: visibleProducts.length,
       hasMore,
       page: currentPage,
@@ -255,6 +262,7 @@ export async function getAllProducts(req, res) {
     return sendResponse(res, 500, false, "Internal server error.");
   }
 }
+
 
 
 // ===============================
