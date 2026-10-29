@@ -1,3 +1,4 @@
+
 import UserModel from "../models/user.model.js";
 import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -11,39 +12,74 @@ import { OAuth2Client } from "google-auth-library";
 import cloudinary from "../config/cloudinary.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ACCESS_COOKIE_MS = 15 * 60 * 1000;
+const REFRESH_COOKIE_MS = 7 * 24 * 60 * 60 * 1000;
+
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-function getCookieOptions(req) {
-  // Hosting platforms do not always set NODE_ENV. Use the actual request
-  // scheme (including the trusted proxy header) so HTTPS logins receive a
-  // cross-site-capable cookie on Safari and other mobile browsers.
-  const isSecureRequest = req.secure || req.get("x-forwarded-proto") === "https";
+function getCookieOptions() {
+  const isProduction = process.env.NODE_ENV === "production";
+
   return {
     httpOnly: true,
-    secure: isSecureRequest,
-    sameSite: isSecureRequest ? "None" : "Lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
   };
 }
 
+function setAuthCookies(res, accessToken, refreshToken) {
+  const options = getCookieOptions();
+
+  res.cookie("accessToken", accessToken, {
+    ...options,
+    maxAge: ACCESS_COOKIE_MS,
+  });
+
+  res.cookie("refreshToken", refreshToken, {
+    ...options,
+    maxAge: REFRESH_COOKIE_MS,
+  });
+}
+
+function clearAuthCookies(res) {
+  const options = getCookieOptions();
+
+  res.clearCookie("accessToken", options);
+  res.clearCookie("refreshToken", options);
+}
+
 function generateOtp() {
-  // crypto.randomInt is cryptographically secure, unlike Math.random()
-  return crypto.randomInt(100000, 999999).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 function isStrongPassword(password) {
-  // at least 8 chars, one uppercase, one lowercase, one number, one special char
-  const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
-  return strongRegex.test(password);
+  if (typeof password !== "string") return false;
+
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(
+    password,
+  );
 }
 
 function logError(context, error) {
-  console.error(`[${context}]`, error);
+  // Do not log request bodies, passwords, cookies, or tokens.
+  console.error(`[${context}]`, {
+    name: error?.name || "Error",
+    message: error?.message || "Unexpected error",
+    code: error?.code,
+  });
+}
+
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
 }
 
 // REGISTER
 export async function registerUserController(req, res) {
   try {
-    const { name, email, password, adminCode } = req.body;
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const email = normalizeEmail(req.body.email);
+    const { password, adminCode } = req.body;
 
     if (!name || !email || !password) {
       return sendResponse(res, 400, false, "Provide all fields");
@@ -58,25 +94,23 @@ export async function registerUserController(req, res) {
         res,
         400,
         false,
-        "Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character"
+        "Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character",
       );
     }
 
-    const existingUser = await UserModel.findOne({ email });
+    if (adminCode && adminCode !== process.env.ADMIN_SIGNUP_CODE) {
+      return sendResponse(res, 403, false, "Invalid admin code");
+    }
+
+    const existingUser = await UserModel.findOne({ email }).lean();
+
     if (existingUser) {
       return sendResponse(res, 400, false, "Email already registered");
     }
 
-    let role = "USER";
-    if (adminCode) {
-      if (adminCode !== process.env.ADMIN_SIGNUP_CODE) {
-        return sendResponse(res, 403, false, "Invalid admin code");
-      }
-      role = "ADMIN";
-    }
-
+    const role = adminCode ? "ADMIN" : "USER";
     const otpCode = generateOtp();
-    const hashedPassword = await bcryptjs.hash(password, 10);
+    const hashedPassword = await bcryptjs.hash(password, 12);
 
     const user = new UserModel({
       name,
@@ -96,20 +130,34 @@ export async function registerUserController(req, res) {
       html: verifyEmailTemplate(name, otpCode),
     });
 
-    if (!emailResult.success) {
-      logError("registerUserController - sendEmail", emailResult.error);
+    if (!emailResult?.success) {
+      logError(
+        "registerUserController - sendEmail",
+        emailResult?.error || new Error("Email delivery failed"),
+      );
+
       return sendResponse(
         res,
         201,
         true,
-        "Account created, but the verification email failed to send. Please use 'resend OTP' or contact support.",
-        { emailSent: false }
+        "Account created, but the verification email failed to send. Please request a new OTP or contact support.",
+        { emailSent: false },
       );
     }
 
-    return sendResponse(res, 200, true, "Registered successfully. Check your email for OTP.");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Registered successfully. Check your email for OTP.",
+    );
   } catch (error) {
     logError("registerUserController", error);
+
+    if (error?.code === 11000) {
+      return sendResponse(res, 409, false, "Email already registered");
+    }
+
     return sendResponse(res, 500, false, "Internal server error");
   }
 }
@@ -117,16 +165,32 @@ export async function registerUserController(req, res) {
 // VERIFY EMAIL
 export async function verifyEmailController(req, res) {
   try {
-    const { email, otp } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { otp } = req.body;
+
+    if (!email || typeof otp !== "string") {
+      return sendResponse(res, 400, false, "Provide email and OTP");
+    }
+
     const user = await UserModel.findOne({ email });
 
-    if (!user) return sendResponse(res, 400, false, "User not found");
-    if (user.otp !== otp) return sendResponse(res, 400, false, "Invalid OTP");
-    if (user.otpExpiry < Date.now()) return sendResponse(res, 400, false, "OTP expired");
+    if (!user) {
+      return sendResponse(res, 400, false, "Invalid or expired OTP");
+    }
+
+    if (
+      !user.otp ||
+      user.otp !== otp ||
+      !user.otpExpiry ||
+      new Date(user.otpExpiry).getTime() < Date.now()
+    ) {
+      return sendResponse(res, 400, false, "Invalid or expired OTP");
+    }
 
     user.verify_email = true;
     user.otp = null;
     user.otpExpiry = null;
+
     await user.save();
 
     return sendResponse(res, 200, true, "Email verified");
@@ -139,10 +203,18 @@ export async function verifyEmailController(req, res) {
 // LOGIN
 export async function loginUserController(req, res) {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { password } = req.body;
+
+    if (!email || typeof password !== "string" || !password) {
+      return sendResponse(res, 400, false, "Provide email and password");
+    }
+
     const user = await UserModel.findOne({ email });
 
-    if (!user) return sendResponse(res, 400, false, "Invalid email or password");
+    if (!user) {
+      return sendResponse(res, 400, false, "Invalid email or password");
+    }
 
     if (user.status === "Suspended") {
       return sendResponse(res, 403, false, "Your account has been suspended");
@@ -153,21 +225,25 @@ export async function loginUserController(req, res) {
     }
 
     const isMatch = await bcryptjs.compare(password, user.password);
-    if (!isMatch) return sendResponse(res, 400, false, "Invalid email or password");
+
+    if (!isMatch) {
+      return sendResponse(res, 400, false, "Invalid email or password");
+    }
 
     const accessToken = await generatedAccessToken(user._id);
     const refreshToken = await generatedRefreshToken(user._id);
 
     user.refresh_token = refreshToken;
     user.last_login_date = new Date();
+
     await user.save();
 
-    const cookiesOption = getCookieOptions(req);
-    res.cookie("accessToken", accessToken, cookiesOption);
-    res.cookie("refreshToken", refreshToken, cookiesOption);
+    setAuthCookies(res, accessToken, refreshToken);
 
-    // Tokens live in httpOnly cookies only - not echoed back in the body
-    return sendResponse(res, 200, true, "Login successful", { role: user.role, name: user.name });
+    return sendResponse(res, 200, true, "Login successful", {
+      role: user.role,
+      name: user.name,
+    });
   } catch (error) {
     logError("loginUserController", error);
     return sendResponse(res, 500, false, "Internal server error");
@@ -178,13 +254,13 @@ export async function loginUserController(req, res) {
 export async function logoutController(req, res) {
   try {
     const userId = req.userId;
-    const cookiesOption = getCookieOptions(req);
 
-    res.clearCookie("accessToken", cookiesOption);
-    res.clearCookie("refreshToken", cookiesOption);
+    clearAuthCookies(res);
 
     if (userId) {
-      await UserModel.findByIdAndUpdate(userId, { refresh_token: "" });
+      await UserModel.findByIdAndUpdate(userId, {
+        $set: { refresh_token: "" },
+      });
     }
 
     return sendResponse(res, 200, true, "Logout successful");
@@ -197,7 +273,14 @@ export async function logoutController(req, res) {
 // GET USER DETAILS
 export async function userDetails(req, res) {
   try {
-    const user = await UserModel.findById(req.userId).select("-password -refresh_token -otp -otpExpiry -passwordResetExpires -avatarPublicId");
+    const user = await UserModel.findById(req.userId).select(
+      "-password -refresh_token -otp -otpExpiry -passwordResetExpires -avatarPublicId",
+    );
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
     return sendResponse(res, 200, true, "User fetched", user);
   } catch (error) {
     logError("userDetails", error);
@@ -205,39 +288,53 @@ export async function userDetails(req, res) {
   }
 }
 
-// GET ALL USERS (admin only) - supports search by name/email, role/status filter, pagination
+// GET ALL USERS (admin only)
 export async function getAllUsers(req, res) {
   try {
-    const { search, role, status, page = 1, limit = 20 } = req.query;
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const role = req.query.role;
+    const status = req.query.status;
 
-    let filter = {};
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(req.query.limit, 10) || 20),
+    );
+
+    const filter = {};
 
     if (search) {
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
       filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
+        { name: { $regex: escapedSearch, $options: "i" } },
+        { email: { $regex: escapedSearch, $options: "i" } },
       ];
     }
 
     if (role && role !== "All") filter.role = role;
     if (status && status !== "All") filter.status = status;
 
-    let skip = (Number(page) - 1) * Number(limit);
+    const skip = (page - 1) * limit;
 
     const [users, total] = await Promise.all([
       UserModel.find(filter)
-        .select("-password -refresh_token -otp -otpExpiry -passwordResetExpires -avatarPublicId")
+        .select(
+          "-password -refresh_token -otp -otpExpiry -passwordResetExpires -avatarPublicId",
+        )
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(limit)
+        .lean(),
       UserModel.countDocuments(filter),
     ]);
 
     return sendResponse(res, 200, true, "Users fetched", {
       users,
       total,
-      page: Number(page),
-      totalPages: Math.ceil(total / Number(limit)),
+      page,
+      totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
     logError("getAllUsers", error);
@@ -245,29 +342,35 @@ export async function getAllUsers(req, res) {
   }
 }
 
-// BLOCK / UNBLOCK USER (admin only) - toggles between Active and Suspended
+// BLOCK / UNBLOCK USER (admin only)
 export async function toggleUserStatus(req, res) {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
     const validStatuses = ["Active", "Inactive", "Suspended"];
+
     if (!validStatuses.includes(status)) {
       return sendResponse(res, 400, false, "Invalid status value");
     }
 
     if (id === req.userId) {
-      return sendResponse(res, 400, false, "You cannot change your own account status");
+      return sendResponse(
+        res,
+        400,
+        false,
+        "You cannot change your own account status",
+      );
     }
 
     const user = await UserModel.findById(id);
+
     if (!user) {
       return sendResponse(res, 404, false, "User not found");
     }
 
     user.status = status;
 
-    // a suspended user's existing session should stop working immediately
     if (status === "Suspended") {
       user.refresh_token = "";
     }
@@ -294,6 +397,7 @@ export async function deleteUser(req, res) {
     }
 
     const user = await UserModel.findByIdAndDelete(id);
+
     if (!user) {
       return sendResponse(res, 404, false, "User not found");
     }
@@ -308,32 +412,46 @@ export async function deleteUser(req, res) {
 // UPDATE USER
 export async function updateUserDetails(req, res) {
   try {
-    const { name, email, mobile } = req.body;
+    const name =
+      typeof req.body.name === "string" ? req.body.name : undefined;
+    const email =
+      typeof req.body.email === "string"
+        ? normalizeEmail(req.body.email)
+        : undefined;
+    const mobile =
+      typeof req.body.mobile === "string" ? req.body.mobile.trim() : undefined;
 
     if (name !== undefined && !name.trim()) {
       return sendResponse(res, 400, false, "Name cannot be empty");
     }
 
-    if (email) {
-      if (!EMAIL_REGEX.test(email)) {
-        return sendResponse(res, 400, false, "Invalid email address");
-      }
+    if (email !== undefined && !EMAIL_REGEX.test(email)) {
+      return sendResponse(res, 400, false, "Invalid email address");
+    }
 
-      // prevent taking over someone else's email
-      const emailExists = await UserModel.findOne({ email, _id: { $ne: req.userId } });
+    if (email !== undefined) {
+      const emailExists = await UserModel.findOne({
+        email,
+        _id: { $ne: req.userId },
+      }).lean();
+
       if (emailExists) {
         return sendResponse(res, 400, false, "Email already in use");
       }
     }
 
     const user = await UserModel.findById(req.userId);
-    if (!user) return sendResponse(res, 404, false, "User not found");
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
 
     if (name !== undefined) user.name = name.trim();
     if (email !== undefined) user.email = email;
     if (mobile !== undefined) user.mobile = mobile;
 
     const previousAvatarPublicId = user.avatarPublicId;
+
     if (req.file) {
       user.avatar = req.file.path;
       user.avatarPublicId = req.file.filename;
@@ -342,17 +460,25 @@ export async function updateUserDetails(req, res) {
     await user.save();
 
     if (req.file && previousAvatarPublicId) {
-      cloudinary.uploader.destroy(previousAvatarPublicId).catch((error) =>
-        logError("updateUserDetails - remove old avatar", error)
-      );
+      cloudinary.uploader
+        .destroy(previousAvatarPublicId)
+        .catch((error) =>
+          logError("updateUserDetails - remove old avatar", error),
+        );
     }
 
     const updatedUser = user.toObject();
-    delete updatedUser.password;
-    delete updatedUser.refresh_token;
-    delete updatedUser.otp;
-    delete updatedUser.otpExpiry;
-    delete updatedUser.passwordResetExpires;
+
+    for (const key of [
+      "password",
+      "refresh_token",
+      "otp",
+      "otpExpiry",
+      "passwordResetExpires",
+      "avatarPublicId",
+    ]) {
+      delete updatedUser[key];
+    }
 
     return sendResponse(res, 200, true, "Updated successfully", updatedUser);
   } catch (error) {
@@ -364,22 +490,65 @@ export async function updateUserDetails(req, res) {
 // SAVE SHIPPING ADDRESS
 export async function saveShippingAddress(req, res) {
   try {
-    const { label = "Home", fullName, phone, address, city, state, country = "Nigeria" } = req.body;
-    if (![fullName, phone, address, city, state].every((value) => value?.trim())) {
-      return sendResponse(res, 400, false, "Provide all required address fields");
+    const {
+      label = "Home",
+      fullName,
+      phone,
+      address,
+      city,
+      state,
+      country = "Nigeria",
+    } = req.body;
+
+    const fields = [fullName, phone, address, city, state];
+
+    if (
+      !fields.every(
+        (value) => typeof value === "string" && value.trim().length > 0,
+      )
+    ) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Provide all required address fields",
+      );
     }
 
     const user = await UserModel.findById(req.userId);
-    if (!user) return sendResponse(res, 404, false, "User not found");
 
-    const normalized = { label: label.trim() || "Home", fullName: fullName.trim(), phone: phone.trim(), address: address.trim(), city: city.trim(), state: state.trim(), country: country.trim() || "Nigeria" };
-    const existingIndex = user.savedAddresses.findIndex((item) =>
-      item.address.toLowerCase() === normalized.address.toLowerCase() && item.city.toLowerCase() === normalized.city.toLowerCase()
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    const normalized = {
+      label:
+        typeof label === "string" && label.trim() ? label.trim() : "Home",
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      address: address.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      country:
+        typeof country === "string" && country.trim()
+          ? country.trim()
+          : "Nigeria",
+    };
+
+    const existingIndex = user.savedAddresses.findIndex(
+      (item) =>
+        item.address.toLowerCase() === normalized.address.toLowerCase() &&
+        item.city.toLowerCase() === normalized.city.toLowerCase(),
     );
-    if (existingIndex >= 0) user.savedAddresses[existingIndex] = normalized;
-    else user.savedAddresses.push(normalized);
+
+    if (existingIndex >= 0) {
+      user.savedAddresses[existingIndex] = normalized;
+    } else {
+      user.savedAddresses.push(normalized);
+    }
 
     await user.save();
+
     return sendResponse(res, 200, true, "Address saved", user.savedAddresses);
   } catch (error) {
     logError("saveShippingAddress", error);
@@ -390,19 +559,36 @@ export async function saveShippingAddress(req, res) {
 // FORGOT PASSWORD
 export async function forgotPasswordController(req, res) {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body.email);
+
+    if (!EMAIL_REGEX.test(email)) {
+      return sendResponse(
+        res,
+        200,
+        true,
+        "If that email is registered, an OTP has been sent",
+      );
+    }
+
     const user = await UserModel.findOne({ email });
 
-    // don't reveal whether the email exists - respond the same either way
     if (!user) {
-      return sendResponse(res, 200, true, "If that email is registered, an OTP has been sent");
+      return sendResponse(
+        res,
+        200,
+        true,
+        "If that email is registered, an OTP has been sent",
+      );
     }
 
     const otp = generateOtp();
+
     await UserModel.findByIdAndUpdate(user._id, {
-      otp,
-      otpExpiry: Date.now() + 600000,
-      passwordResetExpires: null,
+      $set: {
+        otp,
+        otpExpiry: Date.now() + 10 * 60 * 1000,
+        passwordResetExpires: null,
+      },
     });
 
     const emailResult = await sendEmail({
@@ -412,11 +598,19 @@ export async function forgotPasswordController(req, res) {
       html: verifyEmailTemplate(user.name, otp),
     });
 
-    if (!emailResult.success) {
-      logError("forgotPasswordController - sendEmail", emailResult.error);
+    if (!emailResult?.success) {
+      logError(
+        "forgotPasswordController - sendEmail",
+        emailResult?.error || new Error("Email delivery failed"),
+      );
     }
 
-    return sendResponse(res, 200, true, "If that email is registered, an OTP has been sent");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "If that email is registered, an OTP has been sent",
+    );
   } catch (error) {
     logError("forgotPasswordController", error);
     return sendResponse(res, 500, false, "Internal server error");
@@ -426,16 +620,29 @@ export async function forgotPasswordController(req, res) {
 // VERIFY FORGOT PASSWORD OTP
 export async function verifyforgotPasswordOtp(req, res) {
   try {
-    const { email, otp } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { otp } = req.body;
+
+    if (!email || typeof otp !== "string") {
+      return sendResponse(res, 400, false, "Provide email and OTP");
+    }
+
     const user = await UserModel.findOne({ email });
 
-    if (!user) return sendResponse(res, 404, false, "User not found");
-    if (otp !== user.otp) return sendResponse(res, 400, false, "Invalid OTP");
-    if (user.otpExpiry < Date.now()) return sendResponse(res, 400, false, "OTP expired");
+    if (
+      !user ||
+      !user.otp ||
+      user.otp !== otp ||
+      !user.otpExpiry ||
+      new Date(user.otpExpiry).getTime() < Date.now()
+    ) {
+      return sendResponse(res, 400, false, "Invalid or expired OTP");
+    }
 
     user.otp = null;
     user.otpExpiry = null;
     user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
+
     await user.save();
 
     return sendResponse(res, 200, true, "OTP verified");
@@ -448,7 +655,8 @@ export async function verifyforgotPasswordOtp(req, res) {
 // RESET PASSWORD
 export async function resetPassword(req, res) {
   try {
-    const { email, newPassword, confirmPassword } = req.body;
+    const email = normalizeEmail(req.body.email);
+    const { newPassword, confirmPassword } = req.body;
 
     if (!email || !newPassword || !confirmPassword) {
       return sendResponse(res, 400, false, "Provide all fields");
@@ -459,7 +667,7 @@ export async function resetPassword(req, res) {
         res,
         400,
         false,
-        "Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character"
+        "Password must be at least 8 characters and include uppercase, lowercase, a number, and a special character",
       );
     }
 
@@ -468,16 +676,34 @@ export async function resetPassword(req, res) {
     }
 
     const user = await UserModel.findOne({ email });
-    if (!user) return sendResponse(res, 400, false, "User not found");
 
-    if (!user.passwordResetExpires || user.passwordResetExpires < new Date()) {
-      return sendResponse(res, 400, false, "Password reset verification expired. Please request a new OTP.");
+    if (!user) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Invalid or expired password reset verification",
+      );
     }
 
-    user.password = await bcryptjs.hash(newPassword, 10);
-    // invalidate any existing session on password reset
+    if (
+      !user.passwordResetExpires ||
+      new Date(user.passwordResetExpires).getTime() < Date.now()
+    ) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Password reset verification expired. Please request a new OTP.",
+      );
+    }
+
+    user.password = await bcryptjs.hash(newPassword, 12);
     user.refresh_token = "";
     user.passwordResetExpires = null;
+    user.otp = null;
+    user.otpExpiry = null;
+
     await user.save();
 
     return sendResponse(res, 200, true, "Password updated");
@@ -490,36 +716,51 @@ export async function resetPassword(req, res) {
 // REFRESH TOKEN (with rotation)
 export async function refreshToken(req, res) {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken;
+
     if (!token) {
       return sendResponse(res, 401, false, "No refresh token provided");
     }
 
-    let verifyToken;
+    let verifiedToken;
+
     try {
-      verifyToken = jwt.verify(token, process.env.SECRET_KEY_REFRESH_TOKEN);
+      verifiedToken = jwt.verify(
+        token,
+        process.env.SECRET_KEY_REFRESH_TOKEN,
+      );
     } catch {
+      clearAuthCookies(res);
       return sendResponse(res, 401, false, "Refresh token expired or invalid");
     }
 
-    const user = await UserModel.findById(verifyToken.id);
+    if (!verifiedToken?.id) {
+      clearAuthCookies(res);
+      return sendResponse(res, 401, false, "Refresh token expired or invalid");
+    }
 
-    // the stored token must match exactly - if it doesn't, this token was
-    // already rotated/revoked (e.g. reused after logout or a prior refresh)
+    const user = await UserModel.findById(verifiedToken.id);
+
     if (!user || user.refresh_token !== token) {
+      clearAuthCookies(res);
       return sendResponse(res, 401, false, "Refresh token revoked");
     }
 
-    // rotate: issue a brand new refresh token and invalidate the old one
+    if (user.status === "Suspended") {
+      user.refresh_token = "";
+      await user.save();
+      clearAuthCookies(res);
+
+      return sendResponse(res, 403, false, "Your account has been suspended");
+    }
+
     const newAccessToken = await generatedAccessToken(user._id);
     const newRefreshToken = await generatedRefreshToken(user._id);
 
     user.refresh_token = newRefreshToken;
     await user.save();
 
-    const cookiesOption = getCookieOptions(req);
-    res.cookie("accessToken", newAccessToken, cookiesOption);
-    res.cookie("refreshToken", newRefreshToken, cookiesOption);
+    setAuthCookies(res, newAccessToken, newRefreshToken);
 
     return sendResponse(res, 200, true, "Token refreshed");
   } catch (error) {
@@ -528,11 +769,12 @@ export async function refreshToken(req, res) {
   }
 }
 
+// GOOGLE LOGIN
 export async function googleAuthController(req, res) {
   try {
     const { credential } = req.body;
 
-    if (!credential) {
+    if (typeof credential !== "string" || !credential) {
       return sendResponse(res, 400, false, "Missing Google credential");
     }
 
@@ -542,12 +784,30 @@ export async function googleAuthController(req, res) {
     });
 
     const payload = ticket.getPayload();
-    const { email, sub: googleId, picture, email_verified: emailVerified } = payload;
-    if (!email || !googleId || !emailVerified) {
-      return sendResponse(res, 401, false, "Google account email is not verified");
-    }
-    const name = payload.name || "John Doe";
 
+    if (!payload) {
+      return sendResponse(res, 401, false, "Invalid Google credential");
+    }
+
+    const {
+      email: rawEmail,
+      sub: googleId,
+      picture,
+      email_verified: emailVerified,
+    } = payload;
+
+    const email = normalizeEmail(rawEmail);
+
+    if (!email || !googleId || !emailVerified) {
+      return sendResponse(
+        res,
+        401,
+        false,
+        "Google account email is not verified",
+      );
+    }
+
+    const name = payload.name || "Google User";
     let user = await UserModel.findOne({ email });
 
     if (!user) {
@@ -559,15 +819,23 @@ export async function googleAuthController(req, res) {
         verify_email: true,
         role: "USER",
       });
+
       await user.save();
     } else if (!user.googleId) {
       user.googleId = googleId;
-      if (!user.avatar) user.avatar = picture;
+
+      if (!user.avatar) {
+        user.avatar = picture;
+      }
+
       await user.save();
     } else if (user.googleId !== googleId) {
-      // Do not let a different Google identity take over an existing account
-      // merely because it reports the same email address.
-      return sendResponse(res, 403, false, "This email is already linked to another Google account");
+      return sendResponse(
+        res,
+        403,
+        false,
+        "This email is already linked to another Google account",
+      );
     }
 
     if (user.status === "Suspended") {
@@ -579,11 +847,10 @@ export async function googleAuthController(req, res) {
 
     user.refresh_token = refreshToken;
     user.last_login_date = new Date();
+
     await user.save();
 
-    const cookiesOption = getCookieOptions(req);
-    res.cookie("accessToken", accessToken, cookiesOption);
-    res.cookie("refreshToken", refreshToken, cookiesOption);
+    setAuthCookies(res, accessToken, refreshToken);
 
     return sendResponse(res, 200, true, "Login successful", {
       role: user.role,
