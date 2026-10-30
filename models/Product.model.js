@@ -164,6 +164,12 @@ productSchema.index({ status: 1 });
 // Supports the default product listing sorted by newest first.
 productSchema.index({ createdAt: -1 });
 
+// Matches GET /api/products?category=... sorted by newest first.
+productSchema.index({ category: 1, createdAt: -1 });
+
+// Matches the featured-products filter and newest-first sort.
+productSchema.index({ isFeatured: 1, status: 1, createdAt: -1 });
+
 const ProductModel = mongoose.model("Product", productSchema);
 
 export default ProductModel;

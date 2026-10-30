@@ -7,10 +7,12 @@ import {
   markAsRead,
   markAllAsRead,
   deleteNotification,
+  streamAdminNotifications,
 } from "../controllers/Notification.controller.js";
 
 const router = Router();
 
+router.get("/stream", auth, adminOnly, streamAdminNotifications);
 router.get("/", auth, adminOnly, getAllNotifications);
 router.get("/unread-count", auth, adminOnly, getUnreadCount);
 router.put("/:id/read", auth, adminOnly, markAsRead);

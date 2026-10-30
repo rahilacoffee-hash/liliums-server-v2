@@ -6,6 +6,8 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 
 import { apiLimiter } from "./middleware/rateLimiter.js";
+import { getMongoOptions } from "./config/mongoOptions.js";
+import { installMongoCommandTiming } from "./utils/mongoCommandTiming.js";
 
 import userRouter from "./route/user.route.js";
 import productRouter from "./route/product.route.js";
@@ -36,6 +38,8 @@ app.disable("x-powered-by");
 // Configure this for the actual Render proxy topology.
 // Verify client IP handling before relying on IP-based limits.
 app.set("trust proxy", 1);
+
+
 
 /* =========================
    Security headers
@@ -209,31 +213,42 @@ async function startServer() {
     process.exit(1);
   }
 
+  // Start HTTP immediately so liveness checks do not wait for MongoDB.
+  server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Liliums API listening on port ${PORT}`);
+    connectMongo();
+  });
+
+  server.on("error", (error) => {
+    console.error("HTTP server error:", error);
+    shutdown("HTTP server error", 1);
+  });
+}
+
+let isConnectingToMongo = false;
+
+async function connectMongo() {
+  if (isConnectingToMongo || mongoose.connection.readyState === 1) return;
+
+  isConnectingToMongo = true;
+
   try {
-   await mongoose.connect(process.env.MONGODB_URI, {
-  family: 4,
-  maxPoolSize: 20,
-  minPoolSize: 0,
-  maxIdleTimeMS: 30000,
-  waitQueueTimeoutMS: 10000,
-  serverSelectionTimeoutMS: 15000,
-  connectTimeoutMS: 10000,
-});
+    await mongoose.connect(
+      process.env.MONGODB_URI,
+      getMongoOptions({ monitorCommands: true }),
+    );
 
+    installMongoCommandTiming(mongoose.connection.getClient());
     console.log("MongoDB connected successfully");
-
-    server = app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Liliums API listening on port ${PORT}`);
-    });
-
-    server.on("error", (error) => {
-      console.error("HTTP server error:", error);
-      shutdown("HTTP server error", 1);
-    });
   } catch (error) {
-    console.error("Failed to start Liliums API:", error);
-    await mongoose.disconnect().catch(() => {});
-    process.exit(1);
+    console.error("MongoDB connection failed; API remains alive but not ready:", error.message);
+
+    // Retry in the background; liveness remains responsive while the database
+    // is unavailable, and /health/ready continues to return 503.
+    const retryTimer = setTimeout(connectMongo, 5000);
+    retryTimer.unref();
+  } finally {
+    isConnectingToMongo = false;
   }
 }
 

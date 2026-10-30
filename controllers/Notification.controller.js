@@ -1,8 +1,39 @@
 import NotificationModel from "../models/Notification.model.js";
 import { sendResponse } from "../utils/Sendresponse.js";
+import { addAdminNotificationStream } from "../utils/adminNotificationStream.js";
 
 function logError(context, error) {
   console.error(`[${context}]`, error);
+}
+
+
+// REAL-TIME ADMIN STREAM (auth + adminOnly middleware are applied by the route)
+export function streamAdminNotifications(req, res) {
+  res.status(200);
+  res.set({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  res.write("retry: 10000\n: connected\n\n");
+
+  const removeStream = addAdminNotificationStream(res);
+  const heartbeat = setInterval(() => {
+    if (!res.destroyed && !res.writableEnded) {
+      res.write(": keep-alive\n\n");
+    }
+  }, 25000);
+  heartbeat.unref?.();
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    removeStream();
+  };
+
+  req.on("close", cleanup);
+  res.on("close", cleanup);
 }
 
 // GET ALL NOTIFICATIONS (admin only)

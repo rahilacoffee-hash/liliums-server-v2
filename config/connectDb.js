@@ -1,6 +1,7 @@
 
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import { getMongoOptions } from "./mongoOptions.js";
 
 dotenv.config();
 
@@ -26,17 +27,7 @@ const connectDB = async ({
     attempt += 1;
 
     try {
-      await mongoose.connect(process.env.MONGODB_URI, {
-        // Connection pool: tune after measuring real workload.
-        maxPoolSize: 20,
-        minPoolSize: 2,
-        maxIdleTimeMS: 30000,
-        waitQueueTimeoutMS: 10000,
-
-        // Connection and server selection timeouts.
-        serverSelectionTimeoutMS: 10000,
-        connectTimeoutMS: 10000,
-      });
+      await mongoose.connect(process.env.MONGODB_URI, getMongoOptions());
 
       console.log("MongoDB connected successfully");
 

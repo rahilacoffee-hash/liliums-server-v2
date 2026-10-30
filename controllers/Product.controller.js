@@ -2,6 +2,11 @@
 import ProductModel from "../models/Product.model.js";
 import cloudinary from "../config/cloudinary.js";
 import { sendResponse } from "../utils/Sendresponse.js";
+import { randomUUID } from "node:crypto";
+import {
+  discardMongoCommandTiming,
+  takeMongoCommandMs,
+} from "../utils/mongoCommandTiming.js";
 
 function logError(context, error) {
   console.error(`[${context}]`, error);
@@ -176,6 +181,7 @@ export async function createProduct(req, res) {
 
 export async function getAllProducts(req, res) {
   const startedAt = performance.now();
+  let traceId;
 
   try {
     const { category, search, page = 1, limit = 12 } = req.query;
@@ -214,26 +220,33 @@ export async function getAllProducts(req, res) {
     }
 
     const queryStartedAt = performance.now();
+    traceId = `product-list:${randomUUID()}`;
 
     const products = await ProductModel.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageSize + 1)
+      .comment(traceId)
       .lean()
       .exec();
 
     const queryMs = Math.round(
       performance.now() - queryStartedAt
     );
+    const mongoCommandMs = takeMongoCommandMs(traceId);
 
     const hasMore = products.length > pageSize;
     const visibleProducts = hasMore
       ? products.slice(0, pageSize)
       : products;
 
-    console.log("[product-list timing]", {
+    const timing = {
       totalMs: Math.round(performance.now() - startedAt),
       queryMs,
+      // The driver command duration starts after checkout/selection.
+      mongoCommandRoundTripMs: mongoCommandMs,
+      estimatedUnmeasuredQueryMs:
+        mongoCommandMs === null ? null : Math.max(0, queryMs - mongoCommandMs),
       returned: visibleProducts.length,
       hasMore,
       page: currentPage,
@@ -242,7 +255,12 @@ export async function getAllProducts(req, res) {
         typeof search === "string" && search.trim()
       ),
       hasCategory: Boolean(category && category !== "All"),
-    });
+    };
+
+    const slowThresholdMs = Number(process.env.PRODUCT_LIST_SLOW_MS) || 1000;
+    if (timing.totalMs >= slowThresholdMs) {
+      console.warn("[product-list slow]", timing);
+    }
 
     return sendResponse(
       res,
@@ -257,6 +275,7 @@ export async function getAllProducts(req, res) {
       }
     );
   } catch (error) {
+    if (traceId) discardMongoCommandTiming(traceId);
     logError("getAllProducts", error);
 
     return sendResponse(res, 500, false, "Internal server error.");

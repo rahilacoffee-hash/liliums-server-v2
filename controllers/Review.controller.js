@@ -2,6 +2,7 @@ import ReviewModel from "../models/Review.model.js";
 import ProductModel from "../models/Product.model.js";
 import UserModel from "../models/user.model.js";
 import { sendResponse } from "../utils/Sendresponse.js";
+import createNotification from "../utils/Createnotification.js";
 
 function logError(context, error) {
   console.error(`[${context}]`, error);
@@ -48,6 +49,13 @@ export async function createReview(req, res) {
     });
 
     await recalculateProductRating(productId);
+
+    await createNotification({
+      type: "review",
+      title: "New product review",
+      message: `${rating}-star review received for ${product.name}`,
+      link: "/admin/reviews",
+    });
 
     return sendResponse(res, 201, true, "Review submitted", review);
   } catch (error) {
